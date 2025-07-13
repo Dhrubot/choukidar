@@ -1,11 +1,556 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@300;400;500;600;700&display=swap');
-
-/* Leaflet CSS */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Bengali:wght@300;400;500;600;700;800&display=swap');
 @import 'leaflet/dist/leaflet.css';
+@import "tailwindcss";
 
+/* Tailwind v4 theme configuration - replaces tailwind.config.js */
+@theme {
+  /* Bangladesh brand colors - exact match from your config */
+  --color-bangladesh-green: #006A4E;
+  --color-bangladesh-red: #F42A41;
+  --color-bangladesh-green-light: #00A86B;
+  --color-bangladesh-green-dark: #004D39;
+  --color-bangladesh-red-light: #FF6B6B;
+  --color-bangladesh-red-dark: #D32F2F;
+  
+  /* Safe Streets brand palette - exact match */
+  --color-safe-primary: #006A4E;
+  --color-safe-secondary: #F42A41;
+  --color-safe-accent: #00A86B;
+  --color-safe-warning: #F59E0B;
+  --color-safe-success: #10B981;
+  --color-safe-danger: #EF4444;
+  --color-safe-info: #3B82F6;
+  
+  /* Neutral grays - exact match from your config */
+  --color-neutral-50: #F8FAFC;
+  --color-neutral-100: #F1F5F9;
+  --color-neutral-200: #E2E8F0;
+  --color-neutral-300: #CBD5E1;
+  --color-neutral-400: #94A3B8;
+  --color-neutral-500: #64748B;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1E293B;
+  --color-neutral-900: #0F172A;
+  
+  /* Font families - exact match */
+  --font-bangla: 'Noto Sans Bengali', sans-serif;
+  --font-sans: 'Inter', 'Noto Sans Bengali', system-ui, sans-serif;
+  
+  /* Font sizes - exact match from your config */
+  --font-size-2xs: 0.625rem;
+  --font-size-2xs-line-height: 0.75rem;
+  --font-size-xs: 0.75rem;
+  --font-size-xs-line-height: 1rem;
+  --font-size-sm: 0.875rem;
+  --font-size-sm-line-height: 1.25rem;
+  --font-size-base: 1rem;
+  --font-size-base-line-height: 1.5rem;
+  --font-size-lg: 1.125rem;
+  --font-size-lg-line-height: 1.75rem;
+  --font-size-xl: 1.25rem;
+  --font-size-xl-line-height: 1.75rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-2xl-line-height: 2rem;
+  --font-size-3xl: 1.875rem;
+  --font-size-3xl-line-height: 2.25rem;
+  --font-size-4xl: 2.25rem;
+  --font-size-4xl-line-height: 2.5rem;
+  --font-size-5xl: 3rem;
+  --font-size-5xl-line-height: 1;
+  --font-size-6xl: 3.75rem;
+  --font-size-6xl-line-height: 1;
+  
+  /* Custom spacing - from your config */
+  --spacing-18: 4.5rem;
+  --spacing-88: 22rem;
+  --spacing-128: 32rem;
+  
+  /* Border radius - from your config */
+  --radius-4xl: 2rem;
+  
+  /* Custom shadows - exact match from your config */
+  --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
+  --shadow-medium: 0 4px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-hard: 0 10px 40px -10px rgba(0, 0, 0, 0.2);
+  
+  /* Custom animations - from your config */
+  --animate-fade-in: fadeIn 0.5s ease-in-out;
+  --animate-slide-up: slideUp 0.3s ease-out;
+  --animate-pulse-slow: pulse 3s infinite;
+}
+
+/* Keyframe animations - exact match from your config */
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slideUp {
+  0% { 
+    transform: translateY(10px); 
+    opacity: 0; 
+  }
+  100% { 
+    transform: translateY(0); 
+    opacity: 1; 
+  }
+}
+
+/* Base styles */
 body {
-  font-family: 'Noto Sans Bengali', sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-neutral-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-300);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-400);
+}
+
+/* Custom utility classes for your specific spacing */
+.spacing-18 { margin: var(--spacing-18); }
+.p-18 { padding: var(--spacing-18); }
+.spacing-88 { margin: var(--spacing-88); }
+.p-88 { padding: var(--spacing-88); }
+.spacing-128 { margin: var(--spacing-128); }
+.p-128 { padding: var(--spacing-128); }
+
+/* Custom border radius utility */
+.rounded-4xl { border-radius: var(--radius-4xl); }
+
+/* Custom animation utilities */
+.animate-fade-in { animation: var(--animate-fade-in); }
+.animate-slide-up { animation: var(--animate-slide-up); }
+.animate-pulse-slow { animation: var(--animate-pulse-slow); }
+
+/* Custom component classes */
+.container-safe {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.container-mobile {
+  max-width: 448px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Button styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background-color: var(--color-safe-primary);
+  color: white;
+  box-shadow: var(--shadow-soft);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-bangladesh-green-dark);
+  box-shadow: var(--shadow-medium);
+}
+
+.btn-secondary {
+  background-color: var(--color-safe-secondary);
+  color: white;
+  box-shadow: var(--shadow-soft);
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-bangladesh-red-dark);
+  box-shadow: var(--shadow-medium);
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--color-safe-primary);
+  border: 2px solid var(--color-safe-primary);
+}
+
+.btn-outline:hover {
+  background-color: var(--color-safe-primary);
+  color: white;
+}
+
+.btn-lg {
+  padding: 1rem 2rem;
+  font-size: 1.125rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+/* Card styles */
+.card {
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--color-neutral-200);
+  overflow: hidden;
+}
+
+.card-body {
+  padding: 1.5rem;
+}
+
+.card-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--color-neutral-200);
+  background-color: var(--color-neutral-50);
+}
+
+/* Form styles */
+.form-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-safe-primary);
+  box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.1);
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-neutral-700);
+  margin-bottom: 0.5rem;
+}
+
+.form-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 0.5rem;
+  background-color: white;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 0.5rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+/* Badge styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-success {
+  background-color: rgb(220 252 231);
+  color: rgb(22 101 52);
+}
+
+.badge-warning {
+  background-color: rgb(254 243 199);
+  color: rgb(146 64 14);
+}
+
+.badge-danger {
+  background-color: rgb(254 226 226);
+  color: rgb(153 27 27);
+}
+
+.badge-info {
+  background-color: rgb(219 234 254);
+  color: rgb(30 64 175);
+}
+
+.badge-pending {
+  background-color: rgb(254 215 170);
+  color: rgb(194 65 12);
+}
+
+/* Alert styles */
+.alert-info {
+  background-color: rgb(239 246 255);
+  border-left: 4px solid rgb(59 130 246);
+  color: rgb(30 64 175);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+/* Background gradients */
+.bg-gradient-safe {
+  background: linear-gradient(135deg, var(--color-safe-primary), var(--color-safe-accent));
+}
+
+.bg-gradient-danger {
+  background: linear-gradient(135deg, var(--color-safe-secondary), var(--color-bangladesh-red-dark));
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .container-safe {
+    padding: 0 0.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-safe {
+    padding: 0 2rem;
+  }
+}
+
+/* Base styles */
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-neutral-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-300);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-400);
+}
+
+/* Custom component classes */
+.container-safe {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.container-mobile {
+  max-width: 448px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Button styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background-color: var(--color-safe-primary);
+  color: white;
+  box-shadow: var(--shadow-soft);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-bangladesh-green-dark);
+  box-shadow: var(--shadow-medium);
+}
+
+.btn-secondary {
+  background-color: var(--color-safe-secondary);
+  color: white;
+  box-shadow: var(--shadow-soft);
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-bangladesh-red-dark);
+  box-shadow: var(--shadow-medium);
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--color-safe-primary);
+  border: 2px solid var(--color-safe-primary);
+}
+
+.btn-outline:hover {
+  background-color: var(--color-safe-primary);
+  color: white;
+}
+
+.btn-lg {
+  padding: 1rem 2rem;
+  font-size: 1.125rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+/* Card styles */
+.card {
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--color-neutral-200);
+  overflow: hidden;
+}
+
+.card-body {
+  padding: 1.5rem;
+}
+
+.card-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--color-neutral-200);
+  background-color: var(--color-neutral-50);
+}
+
+/* Form styles */
+.form-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-safe-primary);
+  box-shadow: 0 0 0 3px rgba(0, 106, 78, 0.1);
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-neutral-700);
+  margin-bottom: 0.5rem;
+}
+
+.form-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 0.5rem;
+  background-color: white;
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 0.5rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+/* Badge styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-success {
+  background-color: rgb(220 252 231);
+  color: rgb(22 101 52);
+}
+
+.badge-warning {
+  background-color: rgb(254 243 199);
+  color: rgb(146 64 14);
+}
+
+.badge-danger {
+  background-color: rgb(254 226 226);
+  color: rgb(153 27 27);
+}
+
+.badge-info {
+  background-color: rgb(219 234 254);
+  color: rgb(30 64 175);
+}
+
+.badge-pending {
+  background-color: rgb(254 215 170);
+  color: rgb(194 65 12);
+}
+
+/* Alert styles */
+.alert-info {
+  background-color: rgb(239 246 255);
+  border-left: 4px solid rgb(59 130 246);
+  color: rgb(30 64 175);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+/* Background gradients */
+.bg-gradient-safe {
+  background: linear-gradient(135deg, var(--color-safe-primary), var(--color-safe-accent));
+}
+
+.bg-gradient-danger {
+  background: linear-gradient(135deg, var(--color-safe-secondary), var(--color-bangladesh-red-dark));
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .container-safe {
+    padding: 0 0.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-safe {
+    padding: 0 2rem;
+  }
 }

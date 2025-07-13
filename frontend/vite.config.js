@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(), // Add this line - Tailwind v4 Vite plugin
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
@@ -14,7 +16,7 @@ export default defineConfig({
         name: 'SafeStreets Bangladesh',
         short_name: 'SafeStreets',
         description: 'Anonymous crime reporting platform',
-        theme_color: '#1f2937',
+        theme_color: '#006A4E', // Use Bangladesh green
         background_color: '#ffffff',
         display: 'standalone',
         icons: [
