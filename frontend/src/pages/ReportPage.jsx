@@ -1,6 +1,9 @@
+// === src/pages/ReportPage.jsx (Complete with ALL original functionality + config integration) ===
 import { useState, useEffect } from 'react'
 import { MapPin, Camera, Send, AlertTriangle, Shield, CheckCircle, Navigation } from 'lucide-react'
 import { useSubmitReport } from '../hooks/useReports'
+import LocationPicker from '../components/LocationPicker/LocationPicker'
+import { isWithinBangladesh } from '../config/locationConfig'
 
 function ReportPage() {
   const [formData, setFormData] = useState({
@@ -10,13 +13,15 @@ function ReportPage() {
     severity: 3
   })
 
+  // Location state management (keeping original functionality)
+  const [selectedLocation, setSelectedLocation] = useState(null)
   const [userLocation, setUserLocation] = useState(null)
   const [locationLoading, setLocationLoading] = useState(false)
   const [locationError, setLocationError] = useState(null)
 
   const { submitReport, submitting, error, success, reset } = useSubmitReport()
 
-  // Get user's current location
+  // Original GPS location functionality (preserved for backward compatibility)
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by this browser')
@@ -29,8 +34,19 @@ function ReportPage() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords
-        setUserLocation({ lat: latitude, lng: longitude })
+        const gpsLocation = { lat: latitude, lng: longitude }
+        setUserLocation(gpsLocation)
         setLocationLoading(false)
+        
+        // Auto-set in LocationPicker as well
+        setSelectedLocation({
+          lat: latitude,
+          lng: longitude,
+          address: 'GPS Location',
+          source: 'GPS',
+          withinBangladesh: isWithinBangladesh(latitude, longitude)
+        })
+        
         console.log('📍 Got user location:', { latitude, longitude })
       },
       (error) => {
@@ -57,36 +73,120 @@ function ReportPage() {
     )
   }
 
+  // Helper function to check if coordinates are within Bangladesh (now using config)
+  // const isWithinBangladesh = (lat, lng) => {
+  //   const bangladeshBounds = {
+  //     north: 26.0,
+  //     south: 20.0,
+  //     east: 93.0,
+  //     west: 88.0
+  //   }
+  //   
+  //   return lat >= bangladeshBounds.south && 
+  //          lat <= bangladeshBounds.north && 
+  //          lng >= bangladeshBounds.west && 
+  //          lng <= bangladeshBounds.east
+  // }
+  // Now using isWithinBangladesh from locationConfig.js
+
+  // Get user's current location on component mount (original behavior)
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          setUserLocation({ lat: latitude, lng: longitude })
+        },
+        (error) => {
+          console.log('Could not get user location:', error)
+          // Don't show error to user initially - LocationPicker will handle this
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 600000 // 10 minutes
+        }
+      )
+    }
+  }, [])
+
+  // Handle location selection from LocationPicker
+  const handleLocationSelect = (locationData) => {
+    console.log('📍 Location selected in ReportPage:', locationData)
+    setSelectedLocation(locationData)
+    
+    // Update form data with the address
+    if (locationData) {
+      setFormData(prev => ({
+        ...prev,
+        location: locationData.address || 'Selected location'
+      }))
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        location: ''
+      }))
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     
     try {
-      // Use user location if available, otherwise default coordinates
-      const coordinates = userLocation 
-        ? [userLocation.lng, userLocation.lat] 
-        : [90.4125, 23.8103] // Default to Dhaka center
+      // Determine coordinates to use (enhanced logic)
+      let coordinates
+      let locationSource = 'default'
+      
+      if (selectedLocation) {
+        // Use manually selected location (priority)
+        coordinates = [selectedLocation.lng, selectedLocation.lat]
+        locationSource = selectedLocation.source
+        console.log('🚀 Using manually selected location:', coordinates)
+      } else if (userLocation) {
+        // Fallback to user's GPS location
+        coordinates = [userLocation.lng, userLocation.lat]
+        locationSource = 'GPS'
+        console.log('🚀 Using GPS fallback location:', coordinates)
+      } else {
+        // Final fallback to Dhaka center
+        coordinates = [90.4125, 23.8103]
+        locationSource = 'default'
+        console.log('🚀 Using default Dhaka location:', coordinates)
+      }
 
+      // Enhanced report data structure with security measures
       const reportData = {
         type: formData.type,
         description: formData.description,
         location: {
           coordinates: coordinates,
-          address: formData.location
+          address: formData.location || 'Location provided',
+          source: locationSource,
+          withinBangladesh: selectedLocation?.withinBangladesh ?? 
+                           (userLocation ? isWithinBangladesh(userLocation.lat, userLocation.lng) : true),
+          obfuscated: true // Always obfuscate for privacy
         },
-        severity: formData.severity
+        severity: formData.severity,
+        timestamp: new Date().toISOString() // Add timestamp for better tracking
       }
 
-      console.log('🚀 Submitting report with coordinates:', coordinates)
+      console.log('🚀 Submitting report with enhanced data:', reportData)
 
       await submitReport(reportData)
       
-      // Reset form on success
+      // Reset form on success (preserve original behavior)
       setFormData({
         type: '',
         description: '',
         location: '',
         severity: 3
       })
+      setSelectedLocation(null)
+      
+      // Clear location states
+      setUserLocation(null)
+      setLocationError(null)
+      setLocationLoading(false)
     } catch (err) {
       console.error('Failed to submit report:', err)
     }
@@ -129,7 +229,7 @@ function ReportPage() {
           </p>
         </div>
 
-        {/* Location Status */}
+        {/* Location Status Section (RESTORED from original) */}
         <div className="card mb-6">
           <div className="card-body">
             <h3 className="font-medium text-neutral-800 mb-3 flex items-center">
@@ -164,6 +264,11 @@ function ReportPage() {
                 <div className="flex items-center">
                   <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
                   <span className="text-green-700 font-medium">Location detected!</span>
+                  {!isWithinBangladesh(userLocation.lat, userLocation.lng) && (
+                    <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                      Outside Bangladesh
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-green-600 mt-1">
                   Your report will use your current area (location is obfuscated for privacy)
@@ -178,13 +283,13 @@ function ReportPage() {
                   <span className="text-yellow-700 font-medium">Location unavailable</span>
                 </div>
                 <p className="text-sm text-yellow-600 mt-1">{locationError}</p>
-                <p className="text-sm text-yellow-600">No worries - you can still submit a report with a manual location.</p>
+                <p className="text-sm text-yellow-600">No worries - you can still submit a report with manual location selection below.</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Success Message */}
+        {/* Success Message (RESTORED) */}
         {success && (
           <div className="alert-success mb-6 animate-slide-up">
             <div className="flex items-start">
@@ -205,7 +310,7 @@ function ReportPage() {
           </div>
         )}
 
-        {/* Error Message */}
+        {/* Error Message (RESTORED) */}
         {error && (
           <div className="alert-danger mb-6">
             <div className="flex items-start">
@@ -229,28 +334,37 @@ function ReportPage() {
           <div className="card-body">
             <form onSubmit={handleSubmit} className="space-y-6">
               
-              {/* Incident Type */}
+              {/* Incident Type (Enhanced with visual cards) */}
               <div>
                 <label className="form-label">
                   <AlertTriangle className="w-4 h-4 text-bangladesh-green" />
-                  Incident Type
+                  Type of Incident
                 </label>
-                <select 
-                  className="form-select"
-                  value={formData.type}
-                  onChange={(e) => setFormData({...formData, type: e.target.value})}
-                  required
-                >
-                  <option value="">Select incident type</option>
-                  {incidentTypes.map(type => (
-                    <option key={type.value} value={type.value}>
-                      {type.icon} {type.label}
-                    </option>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                  {incidentTypes.map((type) => (
+                    <label 
+                      key={type.value}
+                      className={`incident-type-card ${formData.type === type.value ? 'selected' : ''}`}
+                    >
+                      <input 
+                        type="radio" 
+                        name="type" 
+                        value={type.value}
+                        checked={formData.type === type.value}
+                        onChange={(e) => setFormData({...formData, type: e.target.value})}
+                        className="sr-only"
+                        required
+                      />
+                      <div className="flex items-center">
+                        <span className="text-2xl mr-3">{type.icon}</span>
+                        <span className="font-medium">{type.label}</span>
+                      </div>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
 
-              {/* Description */}
+              {/* Description (RESTORED with character counter) */}
               <div>
                 <label className="form-label">
                   <Send className="w-4 h-4 text-bangladesh-green" />
@@ -263,6 +377,7 @@ function ReportPage() {
                   value={formData.description}
                   onChange={(e) => setFormData({...formData, description: e.target.value})}
                   minLength={10}
+                  maxLength={1000}
                   required
                 />
                 <div className="text-xs text-neutral-400 mt-1">
@@ -270,32 +385,48 @@ function ReportPage() {
                 </div>
               </div>
 
-              {/* Location */}
+              {/* Location Selection - HYBRID APPROACH */}
               <div>
-                <label className="form-label">
-                  <MapPin className="w-4 h-4 text-bangladesh-green" />
-                  Location Description
+                <label className="form-label mb-3">
+                  <span className="flex items-center">
+                    <MapPin className="w-4 h-4 text-bangladesh-green" />
+                    Location Selection
+                  </span>
                 </label>
-                <div className="input-with-icon">
-                  <input 
-                    type="text" 
-                    className="form-input"
-                    placeholder="Enter area, landmark, or general location (e.g., Dhanmondi Area)"
-                    value={formData.location}
-                    onChange={(e) => setFormData({...formData, location: e.target.value})}
-                    required
-                  />
-                  <MapPin className="icon" />
+                
+                <LocationPicker
+                  onLocationSelect={handleLocationSelect}
+                  initialLocation={selectedLocation}
+                  userLocation={userLocation}
+                  className="mb-4"
+                />
+
+                {/* Manual location description (enhanced) */}
+                <div className="mt-4">
+                  <label className="text-sm font-medium text-neutral-700 mb-2 block">
+                    Additional Location Details
+                  </label>
+                  <div className="input-with-icon">
+                    <input 
+                      type="text" 
+                      className="form-input"
+                      placeholder="Enter area, landmark, or general location (e.g., Dhanmondi Area)"
+                      value={formData.location}
+                      onChange={(e) => setFormData({...formData, location: e.target.value})}
+                      required
+                    />
+                    <MapPin className="icon" />
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    📍 {selectedLocation || userLocation 
+                      ? 'Your selected location will be used and obfuscated for privacy' 
+                      : 'Provide a general area description - exact location is never stored'
+                    }
+                  </p>
                 </div>
-                <p className="text-xs text-neutral-500 mt-1">
-                  📍 {userLocation 
-                    ? 'Your GPS location will be used and obfuscated for privacy' 
-                    : 'Provide a general area description - exact location is never stored'
-                  }
-                </p>
               </div>
 
-              {/* Severity Level */}
+              {/* Severity Level (RESTORED with detailed descriptions) */}
               <div>
                 <label className="form-label justify-between">
                   <span className="flex items-center">
@@ -323,7 +454,7 @@ function ReportPage() {
                   </div>
                 </div>
 
-                {/* Severity Description */}
+                {/* Severity Description (RESTORED from original) */}
                 <div className="mt-3 p-3 rounded-lg bg-neutral-50">
                   <div className="text-sm text-neutral-600">
                     {formData.severity <= 2 && (
@@ -354,11 +485,14 @@ function ReportPage() {
                 </div>
               </div>
 
-              {/* Submit Button */}
+              {/* Submit Button (RESTORED original styling) */}
               <button 
                 type="submit" 
-                disabled={submitting}
-                className={`btn-secondary w-full ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={submitting || !formData.type || !formData.description}
+                className={`btn-secondary w-full py-4 text-lg ${
+                  submitting || !formData.type || !formData.description 
+                    ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
                 {submitting ? (
                   <div className="flex items-center justify-center">
@@ -376,7 +510,7 @@ function ReportPage() {
           </div>
         </div>
 
-        {/* Privacy Notice */}
+        {/* Privacy Notice (RESTORED) */}
         <div className="alert-info">
           <div className="flex items-start">
             <Shield className="w-5 h-5 mr-3 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -390,7 +524,7 @@ function ReportPage() {
           </div>
         </div>
 
-        {/* Emergency Notice */}
+        {/* Emergency Notice (RESTORED) */}
         <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
           <div className="flex items-start">
             <AlertTriangle className="w-5 h-5 mr-3 text-red-600 flex-shrink-0 mt-0.5" />
