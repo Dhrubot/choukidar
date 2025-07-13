@@ -16,7 +16,7 @@ function Footer() {
                 </div>
                 <div>
                   <span className="text-2xl font-bold">SafeStreets Bangladesh</span>
-                  <div className="text-sm text-neutral-400 font-bangla">নিরাপদ রাস্তার জন্য</div>
+                  <div className="text-sm text-neutral-400 font-bangla">নিরাপদ দেশের জন্য</div>
                 </div>
               </div>
               <p className="text-neutral-300 mb-6 leading-relaxed max-w-md">
@@ -24,7 +24,7 @@ function Footer() {
               </p>
               <div className="flex items-center space-x-2 text-sm text-neutral-400">
                 <Globe className="w-4 h-4" />
-                <span>Available nationwide • নিরাপদ রাস্তার জন্য একসাথে</span>
+                <span>Available nationwide • নিরাপদ দেশের জন্য একসাথে</span>
               </div>
             </div>
 

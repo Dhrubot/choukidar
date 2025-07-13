@@ -37,7 +37,7 @@ function Home() {
               SafeStreets Bangladesh
             </h1>
             <p className="text-xl md:text-2xl mb-4 opacity-95 font-bangla animate-slide-up">
-              নিরাপদ রাস্তার জন্য আপনার কণ্ঠস্বর
+              নিরাপদ দেশের জন্য আপনার কণ্ঠস্বর
             </p>
             <p className="text-lg mb-12 opacity-90 max-w-2xl mx-auto leading-relaxed animate-slide-up">
               Report street crimes anonymously. Help make your community safer through transparent, crowd-sourced incident mapping.
