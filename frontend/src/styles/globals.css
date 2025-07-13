@@ -615,6 +615,22 @@ body {
   border-radius: 0.5rem;
 }
 
+.alert-success {
+  background-color: rgb(240 253 244);
+  border-left: 4px solid rgb(34 197 94);
+  color: rgb(22 101 52);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.alert-danger {
+  background-color: rgb(254 242 242);
+  border-left: 4px solid rgb(239 68 68);
+  color: rgb(153 27 27);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
 /* Background gradients */
 .bg-gradient-safe {
   background: linear-gradient(135deg, var(--color-safe-primary), var(--color-safe-accent));

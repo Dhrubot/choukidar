@@ -1,5 +1,7 @@
+// === Updated src/pages/ReportPage.jsx ===
 import { useState } from 'react'
 import { MapPin, Camera, Send, AlertTriangle, Shield, CheckCircle } from 'lucide-react'
+import { useSubmitReport } from '../hooks/useReports'
 
 function ReportPage() {
   const [formData, setFormData] = useState({
@@ -9,26 +11,42 @@ function ReportPage() {
     severity: 3
   })
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { submitReport, submitting, error, success, reset } = useSubmitReport()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setIsSubmitting(true)
     
-    // TODO: Add API call here
-    console.log('Report submitted:', formData)
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false)
-      // Show success message or redirect
-    }, 2000)
+    try {
+      // Convert form data to match backend schema
+      const reportData = {
+        type: formData.type,
+        description: formData.description,
+        location: {
+          coordinates: [0, 0], // We'll add geolocation later
+          address: formData.location
+        },
+        severity: formData.severity
+      }
+
+      await submitReport(reportData)
+      
+      // Reset form on success
+      setFormData({
+        type: '',
+        description: '',
+        location: '',
+        severity: 3
+      })
+    } catch (err) {
+      // Error is handled by the hook
+      console.error('Failed to submit report:', err)
+    }
   }
 
   const incidentTypes = [
     { value: 'chadabaji', label: 'Chadabaji (Extortion)', icon: '💰' },
     { value: 'teen_gang', label: 'Teen Gang Activity', icon: '👥' },
-    { value: 'chintai', label: 'Chhintai (Street robbery)', icon: '⚠️' },
+    { value: 'chintai', label: 'Chintai (Street Robbery)', icon: '⚠️' },
     { value: 'other', label: 'Other Criminal Activity', icon: '🚨' }
   ]
 
@@ -61,6 +79,46 @@ function ReportPage() {
             Help make your community safer by reporting incidents anonymously and securely
           </p>
         </div>
+
+        {/* Success Message */}
+        {success && (
+          <div className="alert-success mb-6 animate-slide-up">
+            <div className="flex items-start">
+              <CheckCircle className="w-5 h-5 mr-3 text-green-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-green-800 mb-1">Report Submitted Successfully!</h4>
+                <p className="text-sm text-green-700">
+                  Thank you for helping make your community safer. Your report has been received and will be reviewed by our moderation team.
+                </p>
+                <button 
+                  onClick={reset}
+                  className="text-sm text-green-600 underline mt-2"
+                >
+                  Submit another report
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="alert-danger mb-6">
+            <div className="flex items-start">
+              <AlertTriangle className="w-5 h-5 mr-3 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-red-800 mb-1">Submission Failed</h4>
+                <p className="text-sm text-red-700">{error}</p>
+                <button 
+                  onClick={reset}
+                  className="text-sm text-red-600 underline mt-2"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Form Card */}
         <div className="card mb-6">
@@ -189,27 +247,13 @@ function ReportPage() {
                 </div>
               </div>
 
-              {/* Media Upload (Future) */}
-              <div>
-                <label className="form-label">
-                  <Camera className="w-4 h-4 text-bangladesh-green" />
-                  Evidence (Optional)
-                  <span className="text-xs text-neutral-500 ml-2">Coming soon</span>
-                </label>
-                <div className="border-2 border-dashed border-neutral-300 rounded-lg p-6 text-center text-neutral-500">
-                  <Camera className="w-8 h-8 mx-auto mb-2 text-neutral-400" />
-                  <p className="text-sm">Photo/video upload will be available soon</p>
-                  <p className="text-xs">All media will be automatically anonymized</p>
-                </div>
-              </div>
-
               {/* Submit Button */}
               <button 
                 type="submit" 
-                disabled={isSubmitting}
-                className={`btn-secondary w-full ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={submitting}
+                className={`btn-secondary w-full ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                {isSubmitting ? (
+                {submitting ? (
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                     Submitting Report...
