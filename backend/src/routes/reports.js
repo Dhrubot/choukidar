@@ -7,7 +7,7 @@ const Report = require('../models/Report'); // Import the MongoDB model
 // GET all approved reports
 router.get('/', async (req, res) => {
   try {
-    const reports = await Report.find({ status: 'approved' })
+    const reports = await Report.find()
       .select('-ipHash -moderatedBy')
       .sort({ timestamp: -1 });
     

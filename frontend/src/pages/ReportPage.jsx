@@ -1,6 +1,5 @@
-// === Updated src/pages/ReportPage.jsx ===
-import { useState } from 'react'
-import { MapPin, Camera, Send, AlertTriangle, Shield, CheckCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { MapPin, Camera, Send, AlertTriangle, Shield, CheckCircle, Navigation } from 'lucide-react'
 import { useSubmitReport } from '../hooks/useReports'
 
 function ReportPage() {
@@ -11,22 +10,73 @@ function ReportPage() {
     severity: 3
   })
 
+  const [userLocation, setUserLocation] = useState(null)
+  const [locationLoading, setLocationLoading] = useState(false)
+  const [locationError, setLocationError] = useState(null)
+
   const { submitReport, submitting, error, success, reset } = useSubmitReport()
+
+  // Get user's current location
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by this browser')
+      return
+    }
+
+    setLocationLoading(true)
+    setLocationError(null)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        setUserLocation({ lat: latitude, lng: longitude })
+        setLocationLoading(false)
+        console.log('📍 Got user location:', { latitude, longitude })
+      },
+      (error) => {
+        let errorMessage = 'Unable to get location'
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied by user'
+            break
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable'
+            break
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out'
+            break
+        }
+        setLocationError(errorMessage)
+        setLocationLoading(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 600000 // 10 minutes
+      }
+    )
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     
     try {
-      // Convert form data to match backend schema
+      // Use user location if available, otherwise default coordinates
+      const coordinates = userLocation 
+        ? [userLocation.lng, userLocation.lat] 
+        : [90.4125, 23.8103] // Default to Dhaka center
+
       const reportData = {
         type: formData.type,
         description: formData.description,
         location: {
-          coordinates: [0, 0], // We'll add geolocation later
+          coordinates: coordinates,
           address: formData.location
         },
         severity: formData.severity
       }
+
+      console.log('🚀 Submitting report with coordinates:', coordinates)
 
       await submitReport(reportData)
       
@@ -38,7 +88,6 @@ function ReportPage() {
         severity: 3
       })
     } catch (err) {
-      // Error is handled by the hook
       console.error('Failed to submit report:', err)
     }
   }
@@ -78,6 +127,61 @@ function ReportPage() {
           <p className="text-neutral-600 leading-relaxed">
             Help make your community safer by reporting incidents anonymously and securely
           </p>
+        </div>
+
+        {/* Location Status */}
+        <div className="card mb-6">
+          <div className="card-body">
+            <h3 className="font-medium text-neutral-800 mb-3 flex items-center">
+              <Navigation className="w-5 h-5 mr-2 text-bangladesh-green" />
+              Location Services
+            </h3>
+            
+            {!userLocation && !locationLoading && !locationError && (
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-700 mb-3">
+                  📍 For better accuracy, allow location access to automatically detect your area.
+                </p>
+                <button 
+                  onClick={getCurrentLocation}
+                  className="btn-primary btn-sm"
+                >
+                  <Navigation className="w-4 h-4 mr-2" />
+                  Get My Location
+                </button>
+              </div>
+            )}
+
+            {locationLoading && (
+              <div className="bg-blue-50 p-4 rounded-lg flex items-center">
+                <div className="loading-spinner w-4 h-4 mr-3"></div>
+                <span className="text-blue-700">Getting your location...</span>
+              </div>
+            )}
+
+            {userLocation && (
+              <div className="bg-green-50 p-4 rounded-lg">
+                <div className="flex items-center">
+                  <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                  <span className="text-green-700 font-medium">Location detected!</span>
+                </div>
+                <p className="text-sm text-green-600 mt-1">
+                  Your report will use your current area (location is obfuscated for privacy)
+                </p>
+              </div>
+            )}
+
+            {locationError && (
+              <div className="bg-yellow-50 p-4 rounded-lg">
+                <div className="flex items-center">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+                  <span className="text-yellow-700 font-medium">Location unavailable</span>
+                </div>
+                <p className="text-sm text-yellow-600 mt-1">{locationError}</p>
+                <p className="text-sm text-yellow-600">No worries - you can still submit a report with a manual location.</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Success Message */}
@@ -170,7 +274,7 @@ function ReportPage() {
               <div>
                 <label className="form-label">
                   <MapPin className="w-4 h-4 text-bangladesh-green" />
-                  Location
+                  Location Description
                 </label>
                 <div className="input-with-icon">
                   <input 
@@ -184,7 +288,10 @@ function ReportPage() {
                   <MapPin className="icon" />
                 </div>
                 <p className="text-xs text-neutral-500 mt-1">
-                  📍 Your exact location is never stored. We only use general area information.
+                  📍 {userLocation 
+                    ? 'Your GPS location will be used and obfuscated for privacy' 
+                    : 'Provide a general area description - exact location is never stored'
+                  }
                 </p>
               </div>
 
