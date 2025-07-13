@@ -1,21 +1,21 @@
-// === src/routes/admin.js ===
+// === backend/src/routes/admin.js ===
 const express = require('express');
 const router = express.Router();
-
-// Temporary in-memory storage (same as reports.js for now)
-// In production, this would use the same database
-let reports = [];
+const Report = require('../models/Report'); // Import the MongoDB model
 
 // GET all pending reports (admin only)
-router.get('/reports', (req, res) => {
+router.get('/reports', async (req, res) => {
   try {
-    const pendingReports = reports.filter(report => report.status === 'pending');
+    const reports = await Report.find({ status: 'pending' })
+      .sort({ timestamp: -1 });
+    
     res.json({
       success: true,
-      count: pendingReports.length,
-      data: pendingReports
+      count: reports.length,
+      data: reports
     });
   } catch (error) {
+    console.error('❌ Error fetching pending reports:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Error fetching pending reports',
@@ -25,14 +25,18 @@ router.get('/reports', (req, res) => {
 });
 
 // GET all reports (admin only)
-router.get('/reports/all', (req, res) => {
+router.get('/reports/all', async (req, res) => {
   try {
+    const reports = await Report.find()
+      .sort({ timestamp: -1 });
+    
     res.json({
       success: true,
       count: reports.length,
       data: reports
     });
   } catch (error) {
+    console.error('❌ Error fetching all reports:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Error fetching all reports',
@@ -42,7 +46,7 @@ router.get('/reports/all', (req, res) => {
 });
 
 // PUT approve/reject report
-router.put('/reports/:id', (req, res) => {
+router.put('/reports/:id', async (req, res) => {
   try {
     const { status } = req.body;
     
@@ -53,27 +57,30 @@ router.put('/reports/:id', (req, res) => {
       });
     }
 
-    const reportIndex = reports.findIndex(r => r.id === req.params.id);
-    if (reportIndex === -1) {
+    const report = await Report.findByIdAndUpdate(
+      req.params.id,
+      { 
+        status, 
+        moderatedBy: 'admin', // Use proper auth later
+        moderatedAt: new Date() 
+      },
+      { new: true }
+    );
+
+    if (!report) {
       return res.status(404).json({
         success: false,
         message: 'Report not found'
       });
     }
 
-    reports[reportIndex] = {
-      ...reports[reportIndex],
-      status,
-      moderatedBy: 'admin',
-      moderatedAt: new Date().toISOString()
-    };
-
     res.json({
       success: true,
       message: `Report ${status} successfully`,
-      data: reports[reportIndex]
+      data: report
     });
   } catch (error) {
+    console.error('❌ Error updating report:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Error updating report',
@@ -83,13 +90,13 @@ router.put('/reports/:id', (req, res) => {
 });
 
 // GET admin dashboard stats
-router.get('/dashboard', (req, res) => {
+router.get('/dashboard', async (req, res) => {
   try {
     const stats = {
-      total: reports.length,
-      pending: reports.filter(r => r.status === 'pending').length,
-      approved: reports.filter(r => r.status === 'approved').length,
-      rejected: reports.filter(r => r.status === 'rejected').length
+      total: await Report.countDocuments(),
+      pending: await Report.countDocuments({ status: 'pending' }),
+      approved: await Report.countDocuments({ status: 'approved' }),
+      rejected: await Report.countDocuments({ status: 'rejected' })
     };
 
     res.json({
@@ -97,6 +104,7 @@ router.get('/dashboard', (req, res) => {
       data: stats
     });
   } catch (error) {
+    console.error('❌ Error fetching dashboard stats:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Error fetching dashboard stats',
