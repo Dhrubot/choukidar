@@ -222,7 +222,7 @@ const MapPage = memo(() => {
                       Intelligent Crime Map
                     </h1>
                     <p className="text-lg sm:text-xl text-bangladesh-green font-medium font-bangla mb-4">
-                      চোখ রাখছে চৌকিদার
+                      চৌকিদারের চোখে শহর
                     </p>
                     <p className="text-base sm:text-lg text-neutral-600 leading-relaxed">
                       Advanced visualization of <span className="font-semibold text-bangladesh-green">{reportCounts.approved}</span> verified incidents
