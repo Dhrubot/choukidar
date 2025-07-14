@@ -1,5 +1,5 @@
-// === frontend/src/components/Map/HeatmapLayer.jsx ===
-import { useEffect, useRef } from 'react'
+// === frontend/src/components/Map/HeatmapLayer.jsx (COMPLETE + FIXED) ===
+import { useEffect, useRef, useCallback, useMemo } from 'react'
 import L from 'leaflet'
 import 'leaflet.heat'
 
@@ -11,8 +11,8 @@ const HeatmapLayer = ({
 }) => {
   const heatLayerRef = useRef(null)
 
-  // Default heatmap configuration optimized for Bangladesh crime data
-  const defaultOptions = {
+  // Default heatmap configuration optimized for Bangladesh crime data - MEMOIZED
+  const defaultOptions = useMemo(() => ({
     radius: 25, // Base radius for heat points
     blur: 15, // Blur factor for smoother gradients
     maxZoom: 18, // Maximum zoom for heatmap visibility
@@ -26,10 +26,10 @@ const HeatmapLayer = ({
       1.0: '#ff0000'  // Red - High danger
     },
     ...heatmapOptions
-  }
+  }), [heatmapOptions])
 
-  // Convert reports to heatmap data points with severity weighting
-  const prepareHeatmapData = (reports) => {
+  // Convert reports to heatmap data points with severity weighting - MEMOIZED
+  const prepareHeatmapData = useCallback((reports) => {
     return reports
       .filter(report => {
         // Only include approved reports with valid coordinates
@@ -71,9 +71,14 @@ const HeatmapLayer = ({
         return [lat, lng, finalIntensity]
       })
       .filter(point => point !== null) // Remove invalid points
-  }
+  }, [])
 
-  // Update heatmap when reports or visibility changes
+  // Memoize the heatmap data to prevent recalculation on every render
+  const heatmapData = useMemo(() => {
+    return prepareHeatmapData(reports)
+  }, [reports, prepareHeatmapData])
+
+  // Update heatmap when reports or visibility changes - FIXED DEPENDENCIES
   useEffect(() => {
     if (!map) return
 
@@ -85,8 +90,6 @@ const HeatmapLayer = ({
 
     // Create new heatmap if visible and has data
     if (isVisible && reports.length > 0) {
-      const heatmapData = prepareHeatmapData(reports)
-      
       if (heatmapData.length > 0) {
         // Create heatmap layer
         heatLayerRef.current = L.heatLayer(heatmapData, defaultOptions)
@@ -105,15 +108,15 @@ const HeatmapLayer = ({
         heatLayerRef.current = null
       }
     }
-  }, [map, reports, isVisible])
+  }, [map, reports, isVisible, heatmapData, defaultOptions]) // FIXED: Using memoized values
 
-  // Update heatmap options when they change
+  // Update heatmap options when they change - FIXED DEPENDENCIES
   useEffect(() => {
     if (heatLayerRef.current && isVisible) {
       // Update heatmap options
       heatLayerRef.current.setOptions(defaultOptions)
     }
-  }, [heatmapOptions, isVisible])
+  }, [defaultOptions, isVisible]) // FIXED: Using memoized defaultOptions
 
   // This component doesn't render anything visible - it manages the Leaflet layer
   return null

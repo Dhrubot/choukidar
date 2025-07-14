@@ -1,43 +1,109 @@
-// === frontend/src/components/Map/MapViewControls.jsx ===
-import { useState } from 'react'
+// === frontend/src/components/Map/MapViewControls.jsx (OPTIMIZED) ===
+import { useState, useCallback, useMemo, memo } from 'react'
 import { Map, Flame, Layers, Settings, Info } from 'lucide-react'
 
-const MapViewControls = ({ 
+// Move static data outside component to prevent recreation
+const VIEW_MODES = [
+  {
+    id: 'markers',
+    label: 'Markers',
+    icon: Map,
+    description: 'Individual incident markers'
+  },
+  {
+    id: 'heatmap',
+    label: 'Heatmap',
+    icon: Flame,
+    description: 'Crime density visualization'
+  },
+  {
+    id: 'hybrid',
+    label: 'Hybrid',
+    icon: Layers,
+    description: 'Both markers and heatmap'
+  }
+]
+
+const INTENSITY_LEVELS = [
+  { value: 'low', label: 'Low', radius: 15, blur: 8 },
+  { value: 'medium', label: 'Medium', radius: 25, blur: 15 },
+  { value: 'high', label: 'High', radius: 35, blur: 20 }
+]
+
+const MapViewControls = memo(({ 
   viewMode, 
   onViewModeChange, 
-  heatmapOptions,
+  heatmapOptions = {}, // Default value to prevent undefined
   onHeatmapOptionsChange,
   reportCount = 0,
   className = ""
 }) => {
   const [showSettings, setShowSettings] = useState(false)
 
-  const viewModes = [
-    {
-      id: 'markers',
-      label: 'Markers',
-      icon: Map,
-      description: 'Individual incident markers'
-    },
-    {
-      id: 'heatmap',
-      label: 'Heatmap',
-      icon: Flame,
-      description: 'Crime density visualization'
-    },
-    {
-      id: 'hybrid',
-      label: 'Hybrid',
-      icon: Layers,
-      description: 'Both markers and heatmap'
-    }
-  ]
+  // Memoize the toggle settings handler
+  const handleToggleSettings = useCallback(() => {
+    setShowSettings(prev => !prev)
+  }, [])
 
-  const intensityLevels = [
-    { value: 'low', label: 'Low', radius: 15, blur: 8 },
-    { value: 'medium', label: 'Medium', radius: 25, blur: 15 },
-    { value: 'high', label: 'High', radius: 35, blur: 20 }
-  ]
+  // Memoize the view mode change handler to prevent recreation
+  const handleViewModeClick = useCallback((modeId) => {
+    if (onViewModeChange) {
+      onViewModeChange(modeId)
+    }
+  }, [onViewModeChange])
+
+  // Memoize intensity level change handler
+  const handleIntensityChange = useCallback((level) => {
+    if (onHeatmapOptionsChange) {
+      onHeatmapOptionsChange({
+        radius: level.radius,
+        blur: level.blur
+      })
+    }
+  }, [onHeatmapOptionsChange])
+
+  // Memoize manual control handlers
+  const handleRadiusChange = useCallback((e) => {
+    if (onHeatmapOptionsChange) {
+      onHeatmapOptionsChange({
+        ...heatmapOptions,
+        radius: parseInt(e.target.value)
+      })
+    }
+  }, [onHeatmapOptionsChange, heatmapOptions])
+
+  const handleBlurChange = useCallback((e) => {
+    if (onHeatmapOptionsChange) {
+      onHeatmapOptionsChange({
+        ...heatmapOptions,
+        blur: parseInt(e.target.value)
+      })
+    }
+  }, [onHeatmapOptionsChange, heatmapOptions])
+
+  // Memoize reset handler
+  const handleReset = useCallback(() => {
+    if (onHeatmapOptionsChange) {
+      onHeatmapOptionsChange({
+        radius: 25,
+        blur: 15
+      })
+    }
+  }, [onHeatmapOptionsChange])
+
+  // Memoize current heatmap values to prevent unnecessary renders
+  const currentRadius = useMemo(() => heatmapOptions?.radius || 25, [heatmapOptions?.radius])
+  const currentBlur = useMemo(() => heatmapOptions?.blur || 15, [heatmapOptions?.blur])
+
+  // Memoize whether we should show heatmap-related sections
+  const showHeatmapSections = useMemo(() => {
+    return viewMode === 'heatmap' || viewMode === 'hybrid'
+  }, [viewMode])
+
+  // Memoize performance warning condition
+  const showPerformanceWarning = useMemo(() => {
+    return reportCount > 500 && viewMode === 'hybrid'
+  }, [reportCount, viewMode])
 
   return (
     <div className={`bg-white rounded-lg shadow-medium border border-neutral-200 ${className}`}>
@@ -49,7 +115,7 @@ const MapViewControls = ({
             Map Visualization
           </h3>
           <button
-            onClick={() => setShowSettings(!showSettings)}
+            onClick={handleToggleSettings}
             className="p-1 hover:bg-neutral-100 rounded transition-colors"
             title="Heatmap Settings"
           >
@@ -64,14 +130,14 @@ const MapViewControls = ({
       {/* View Mode Selection */}
       <div className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {viewModes.map((mode) => {
+          {VIEW_MODES.map((mode) => {
             const Icon = mode.icon
             const isActive = viewMode === mode.id
             
             return (
               <button
                 key={mode.id}
-                onClick={() => onViewModeChange(mode.id)}
+                onClick={() => handleViewModeClick(mode.id)}
                 className={`flex flex-col items-center p-3 rounded-lg border-2 transition-all duration-200 ${
                   isActive 
                     ? 'border-safe-primary bg-safe-primary text-white shadow-md' 
@@ -91,7 +157,7 @@ const MapViewControls = ({
         </div>
 
         {/* Heatmap Info */}
-        {(viewMode === 'heatmap' || viewMode === 'hybrid') && (
+        {showHeatmapSections && (
           <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-start">
               <Info className="w-4 h-4 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
@@ -112,7 +178,7 @@ const MapViewControls = ({
       </div>
 
       {/* Advanced Heatmap Settings */}
-      {showSettings && (viewMode === 'heatmap' || viewMode === 'hybrid') && (
+      {showSettings && showHeatmapSections && (
         <div className="border-t border-neutral-100 p-4">
           <h4 className="font-medium text-neutral-800 mb-3">Heatmap Settings</h4>
           
@@ -122,15 +188,12 @@ const MapViewControls = ({
               Heat Intensity
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {intensityLevels.map((level) => (
+              {INTENSITY_LEVELS.map((level) => (
                 <button
                   key={level.value}
-                  onClick={() => onHeatmapOptionsChange({
-                    radius: level.radius,
-                    blur: level.blur
-                  })}
+                  onClick={() => handleIntensityChange(level)}
                   className={`px-3 py-2 text-sm rounded border transition-colors ${
-                    heatmapOptions?.radius === level.radius
+                    currentRadius === level.radius
                       ? 'border-safe-primary bg-safe-primary text-white'
                       : 'border-neutral-200 hover:border-neutral-300'
                   }`}
@@ -145,34 +208,28 @@ const MapViewControls = ({
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">
-                Heat Radius: {heatmapOptions?.radius || 25}px
+                Heat Radius: {currentRadius}px
               </label>
               <input
                 type="range"
                 min="10"
                 max="50"
-                value={heatmapOptions?.radius || 25}
-                onChange={(e) => onHeatmapOptionsChange({
-                  ...heatmapOptions,
-                  radius: parseInt(e.target.value)
-                })}
+                value={currentRadius}
+                onChange={handleRadiusChange}
                 className="w-full"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">
-                Blur Factor: {heatmapOptions?.blur || 15}px
+                Blur Factor: {currentBlur}px
               </label>
               <input
                 type="range"
                 min="5"
                 max="30"
-                value={heatmapOptions?.blur || 15}
-                onChange={(e) => onHeatmapOptionsChange({
-                  ...heatmapOptions,
-                  blur: parseInt(e.target.value)
-                })}
+                value={currentBlur}
+                onChange={handleBlurChange}
                 className="w-full"
               />
             </div>
@@ -180,10 +237,7 @@ const MapViewControls = ({
 
           {/* Reset Button */}
           <button
-            onClick={() => onHeatmapOptionsChange({
-              radius: 25,
-              blur: 15
-            })}
+            onClick={handleReset}
             className="mt-4 w-full btn-outline btn-sm"
           >
             Reset to Default
@@ -192,10 +246,10 @@ const MapViewControls = ({
       )}
 
       {/* Performance Warning */}
-      {reportCount > 500 && viewMode === 'hybrid' && (
+      {showPerformanceWarning && (
         <div className="border-t border-neutral-100 p-4">
           <div className="flex items-start p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-            <Icon className="w-4 h-4 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
+            <Info className="w-4 h-4 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-sm text-yellow-800 font-medium">
                 Performance Notice
@@ -209,6 +263,9 @@ const MapViewControls = ({
       )}
     </div>
   )
-}
+})
+
+// Add display name for debugging
+MapViewControls.displayName = 'MapViewControls'
 
 export default MapViewControls

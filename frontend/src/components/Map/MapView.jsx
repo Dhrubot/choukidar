@@ -1,5 +1,5 @@
-// === frontend/src/components/Map/MapView.jsx (ENHANCED) ===
-import { useEffect, useRef, useState } from 'react'
+// === frontend/src/components/Map/MapView.jsx (FIXED) ===
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import HeatmapLayer from './HeatmapLayer'
@@ -26,26 +26,34 @@ const MapView = ({
   const markersRef = useRef([])
   const [isMapReady, setIsMapReady] = useState(false)
 
-  // Initialize map
+  // Memoize static configuration to prevent recreating objects
+  const mapConfig = useMemo(() => ({
+    zoomControl: true,
+    scrollWheelZoom: true,
+    doubleClickZoom: true,
+    dragging: true,
+    touchZoom: true,
+    boxZoom: true,
+    keyboard: true
+  }), [])
+
+  const tileLayerConfig = useMemo(() => ({
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    options: {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }
+  }), [])
+
+  // Initialize map - FIXED: Remove center and zoom from dependencies
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return
 
-    // Create map centered on Dhaka, Bangladesh
-    const map = L.map(mapRef.current, {
-      zoomControl: true,
-      scrollWheelZoom: true,
-      doubleClickZoom: true,
-      dragging: true,
-      touchZoom: true,
-      boxZoom: true,
-      keyboard: true
-    }).setView(center, zoom)
+    // Create map centered on provided coordinates
+    const map = L.map(mapRef.current, mapConfig).setView(center, zoom)
 
     // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-    }).addTo(map)
+    L.tileLayer(tileLayerConfig.url, tileLayerConfig.options).addTo(map)
 
     // Enhanced custom control for SafeStreets
     const info = L.control({ position: 'topright' })
@@ -102,9 +110,9 @@ const MapView = ({
         setIsMapReady(false)
       }
     }
-  }, [center, zoom])
+  }, []) // FIXED: Empty dependency array - map should only initialize once
 
-  // Update view mode indicator
+  // Update view mode indicator - SEPARATE EFFECT
   useEffect(() => {
     if (!mapInstanceRef.current) return
 
@@ -130,87 +138,8 @@ const MapView = ({
     }
   }, [viewMode, reports.length])
 
-  // Update markers when reports change or view mode includes markers
-  useEffect(() => {
-    if (!mapInstanceRef.current) return
-
-    // Clear existing markers
-    markersRef.current.forEach(marker => {
-      mapInstanceRef.current.removeLayer(marker)
-    })
-    markersRef.current = []
-
-    // Only show markers in 'markers' or 'hybrid' mode
-    if ((viewMode === 'markers' || viewMode === 'hybrid') && reports.length > 0) {
-      addMarkersToMap(reports)
-    }
-  }, [reports, viewMode])
-
-  // Add markers to map with enhanced styling
-  const addMarkersToMap = (reports) => {
-    reports.forEach(report => {
-      if (!report.location?.coordinates) return
-
-      const [lng, lat] = report.location.coordinates
-      
-      // Skip invalid coordinates
-      if (!lat || !lng || lat === 0 || lng === 0) return
-
-      // Enhanced marker styling
-      const markerColor = getSeverityColor(report.severity)
-      const incidentIcon = getIncidentIcon(report.type)
-      const pulseClass = report.severity >= 4 ? 'animate-pulse' : ''
-
-      // Create enhanced custom marker
-      const customIcon = L.divIcon({
-        html: `
-          <div class="custom-marker ${pulseClass}" style="
-            background-color: ${markerColor};
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 3px solid white;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.4);
-            font-size: 16px;
-            position: relative;
-            z-index: 1000;
-          ">
-            ${incidentIcon}
-          </div>
-        `,
-        className: 'custom-div-icon',
-        iconSize: [32, 32],
-        iconAnchor: [16, 16]
-      })
-
-      // Create marker with enhanced popup
-      const marker = L.marker([lat, lng], { icon: customIcon })
-
-      // Enhanced popup content
-      const popupContent = createEnhancedPopup(report)
-      marker.bindPopup(popupContent, {
-        maxWidth: 280,
-        className: 'custom-popup'
-      })
-
-      marker.addTo(mapInstanceRef.current)
-      markersRef.current.push(marker)
-    })
-
-    // Adjust map view to show all markers if needed
-    if (markersRef.current.length > 0 && viewMode === 'markers') {
-      const group = new L.featureGroup(markersRef.current)
-      mapInstanceRef.current.fitBounds(group.getBounds().pad(0.05))
-    }
-
-    console.log(`📍 Added ${markersRef.current.length} markers to map`)
-  }
-
-  // Enhanced marker color based on severity
-  const getSeverityColor = (severity) => {
+  // Memoize utility functions to prevent recreation
+  const getSeverityColor = useCallback((severity) => {
     const colors = {
       1: '#10B981', // Green - Low
       2: '#84CC16', // Light green
@@ -219,10 +148,9 @@ const MapView = ({
       5: '#EF4444'  // Red - Critical
     }
     return colors[severity] || colors[3]
-  }
+  }, [])
 
-  // Get incident icon with better emoji selection
-  const getIncidentIcon = (type) => {
+  const getIncidentIcon = useCallback((type) => {
     const icons = {
       'chadabaji': '💰',
       'teen_gang': '👥', 
@@ -230,10 +158,10 @@ const MapView = ({
       'other': '🚨'
     }
     return icons[type] || icons.other
-  }
+  }, [])
 
-  // Create enhanced popup content
-  const createEnhancedPopup = (report) => {
+  // Memoize the popup creation function
+  const createEnhancedPopup = useCallback((report) => {
     const incidentIcon = getIncidentIcon(report.type)
     const severityColor = getSeverityColor(report.severity)
     const reportDate = new Date(report.createdAt || report.timestamp).toLocaleDateString('en-BD', {
@@ -297,7 +225,88 @@ const MapView = ({
         </div>
       </div>
     `
-  }
+  }, [getIncidentIcon, getSeverityColor])
+
+  // Add markers to map function - MEMOIZED
+  const addMarkersToMap = useCallback((reports) => {
+    if (!mapInstanceRef.current) return
+
+    reports.forEach(report => {
+      if (!report.location?.coordinates) return
+
+      const [lng, lat] = report.location.coordinates
+      
+      // Skip invalid coordinates
+      if (!lat || !lng || lat === 0 || lng === 0) return
+
+      // Enhanced marker styling
+      const markerColor = getSeverityColor(report.severity)
+      const incidentIcon = getIncidentIcon(report.type)
+      const pulseClass = report.severity >= 4 ? 'animate-pulse' : ''
+
+      // Create enhanced custom marker
+      const customIcon = L.divIcon({
+        html: `
+          <div class="custom-marker ${pulseClass}" style="
+            background-color: ${markerColor};
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid white;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+            font-size: 16px;
+            position: relative;
+            z-index: 1000;
+          ">
+            ${incidentIcon}
+          </div>
+        `,
+        className: 'custom-div-icon',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      })
+
+      // Create marker with enhanced popup
+      const marker = L.marker([lat, lng], { icon: customIcon })
+
+      // Enhanced popup content
+      const popupContent = createEnhancedPopup(report)
+      marker.bindPopup(popupContent, {
+        maxWidth: 280,
+        className: 'custom-popup'
+      })
+
+      marker.addTo(mapInstanceRef.current)
+      markersRef.current.push(marker)
+    })
+
+    // Adjust map view to show all markers if needed
+    if (markersRef.current.length > 0 && viewMode === 'markers') {
+      const group = new L.featureGroup(markersRef.current)
+      mapInstanceRef.current.fitBounds(group.getBounds().pad(0.05))
+    }
+
+    console.log(`📍 Added ${markersRef.current.length} markers to map`)
+  }, [getSeverityColor, getIncidentIcon, createEnhancedPopup, viewMode])
+
+  // Update markers when reports change or view mode includes markers - FIXED
+  useEffect(() => {
+    if (!mapInstanceRef.current) return
+
+    // Clear existing markers
+    markersRef.current.forEach(marker => {
+      mapInstanceRef.current.removeLayer(marker)
+    })
+    markersRef.current = []
+
+    // Only show markers in 'markers' or 'hybrid' mode
+    if ((viewMode === 'markers' || viewMode === 'hybrid') && reports.length > 0) {
+      addMarkersToMap(reports)
+    }
+  }, [reports, viewMode, addMarkersToMap]) // FIXED: Using memoized function
 
   return (
     <div className={`relative ${className}`}>
