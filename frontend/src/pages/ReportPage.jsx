@@ -1,6 +1,6 @@
-// === src/pages/ReportPage.jsx (Complete with ALL original functionality + config integration) ===
+// === src/pages/ReportPage.jsx (FIXED - Dropdown, Improved Validation, Clean Integration) ===
 import { useState, useEffect } from 'react'
-import { MapPin, Camera, Send, AlertTriangle, Shield, CheckCircle, Navigation } from 'lucide-react'
+import { MapPin, Send, AlertTriangle, Shield, CheckCircle, Navigation, ChevronDown } from 'lucide-react'
 import { useSubmitReport } from '../hooks/useReports'
 import LocationPicker from '../components/LocationPicker/LocationPicker'
 import { isWithinBangladesh } from '../config/locationConfig'
@@ -13,97 +13,34 @@ function ReportPage() {
     severity: 3
   })
 
-  // Location state management (keeping original functionality)
+  // Location state management (streamlined)
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [userLocation, setUserLocation] = useState(null)
   const [locationLoading, setLocationLoading] = useState(false)
   const [locationError, setLocationError] = useState(null)
+  const [formErrors, setFormErrors] = useState({})
 
   const { submitReport, submitting, error, success, reset } = useSubmitReport()
 
-  // Original GPS location functionality (preserved for backward compatibility)
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by this browser')
-      return
-    }
-
-    setLocationLoading(true)
-    setLocationError(null)
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-        const gpsLocation = { lat: latitude, lng: longitude }
-        setUserLocation(gpsLocation)
-        setLocationLoading(false)
-        
-        // Auto-set in LocationPicker as well
-        setSelectedLocation({
-          lat: latitude,
-          lng: longitude,
-          address: 'GPS Location',
-          source: 'GPS',
-          withinBangladesh: isWithinBangladesh(latitude, longitude)
-        })
-        
-        console.log('📍 Got user location:', { latitude, longitude })
-      },
-      (error) => {
-        let errorMessage = 'Unable to get location'
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied by user'
-            break
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information unavailable'
-            break
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out'
-            break
-        }
-        setLocationError(errorMessage)
-        setLocationLoading(false)
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 600000 // 10 minutes
-      }
-    )
-  }
-
-  // Helper function to check if coordinates are within Bangladesh (now using config)
-  // const isWithinBangladesh = (lat, lng) => {
-  //   const bangladeshBounds = {
-  //     north: 26.0,
-  //     south: 20.0,
-  //     east: 93.0,
-  //     west: 88.0
-  //   }
-  //   
-  //   return lat >= bangladeshBounds.south && 
-  //          lat <= bangladeshBounds.north && 
-  //          lng >= bangladeshBounds.west && 
-  //          lng <= bangladeshBounds.east
-  // }
-  // Now using isWithinBangladesh from locationConfig.js
-
-  // Get user's current location on component mount (original behavior)
+  // Get user's current location on component mount
   useEffect(() => {
     if (navigator.geolocation) {
+      setLocationLoading(true)
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords
           setUserLocation({ lat: latitude, lng: longitude })
+          setLocationLoading(false)
+          console.log('📍 Got user location:', { latitude, longitude })
         },
         (error) => {
           console.log('Could not get user location:', error)
+          setLocationLoading(false)
           // Don't show error to user initially - LocationPicker will handle this
         },
         {
           enableHighAccuracy: false,
-          timeout: 5000,
+          timeout: 8000,
           maximumAge: 600000 // 10 minutes
         }
       )
@@ -121,6 +58,11 @@ function ReportPage() {
         ...prev,
         location: locationData.address || 'Selected location'
       }))
+      
+      // Clear location error if one exists
+      if (formErrors.location) {
+        setFormErrors(prev => ({ ...prev, location: null }))
+      }
     } else {
       setFormData(prev => ({
         ...prev,
@@ -129,8 +71,46 @@ function ReportPage() {
     }
   }
 
+  // Enhanced form validation
+  const validateForm = () => {
+    const errors = {}
+
+    // Incident type validation
+    if (!formData.type) {
+      errors.type = 'Please select an incident type'
+    }
+
+    // Description validation
+    if (!formData.description) {
+      errors.description = 'Description is required'
+    } else if (formData.description.length < 10) {
+      errors.description = 'Description must be at least 10 characters'
+    } else if (formData.description.length > 1000) {
+      errors.description = 'Description must be less than 1000 characters'
+    }
+
+    // Location validation
+    if (!formData.location && !selectedLocation && !userLocation) {
+      errors.location = 'Please provide a location'
+    }
+
+    // Severity validation
+    if (!formData.severity || formData.severity < 1 || formData.severity > 5) {
+      errors.severity = 'Please select a valid severity level'
+    }
+
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    // Validate form
+    if (!validateForm()) {
+      console.log('❌ Form validation failed:', formErrors)
+      return
+    }
     
     try {
       // Determine coordinates to use (enhanced logic)
@@ -154,10 +134,10 @@ function ReportPage() {
         console.log('🚀 Using default Dhaka location:', coordinates)
       }
 
-      // Enhanced report data structure with security measures
+      // Enhanced report data structure matching backend schema
       const reportData = {
         type: formData.type,
-        description: formData.description,
+        description: formData.description.trim(),
         location: {
           coordinates: coordinates,
           address: formData.location || 'Location provided',
@@ -166,15 +146,15 @@ function ReportPage() {
                            (userLocation ? isWithinBangladesh(userLocation.lat, userLocation.lng) : true),
           obfuscated: true // Always obfuscate for privacy
         },
-        severity: formData.severity,
-        timestamp: new Date().toISOString() // Add timestamp for better tracking
+        severity: parseInt(formData.severity),
+        timestamp: new Date().toISOString()
       }
 
       console.log('🚀 Submitting report with enhanced data:', reportData)
 
       await submitReport(reportData)
       
-      // Reset form on success (preserve original behavior)
+      // Reset form on success
       setFormData({
         type: '',
         description: '',
@@ -182,21 +162,22 @@ function ReportPage() {
         severity: 3
       })
       setSelectedLocation(null)
+      setFormErrors({})
       
-      // Clear location states
-      setUserLocation(null)
-      setLocationError(null)
-      setLocationLoading(false)
+      // Scroll to top to show success message
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
       console.error('Failed to submit report:', err)
     }
   }
 
+  // Incident types for dropdown (matching backend schema)
   const incidentTypes = [
-    { value: 'chadabaji', label: 'Chadabaji (Extortion)', icon: '💰' },
-    { value: 'teen_gang', label: 'Teen Gang Activity', icon: '👥' },
-    { value: 'chintai', label: 'Chintai (Street Robbery)', icon: '⚠️' },
-    { value: 'other', label: 'Other Criminal Activity', icon: '🚨' }
+    { value: '', label: 'Select incident type...', disabled: true },
+    { value: 'chadabaji', label: '💰 Chadabaji (Extortion)', description: 'Political harassment or forced donations' },
+    { value: 'teen_gang', label: '👥 Teen Gang Activity', description: 'Youth gangs involved in robbery or violence' },
+    { value: 'chintai', label: '⚠️ Chintai (Harassment)', description: 'Illegal extortion by gangs or groups' },
+    { value: 'other', label: '🚨 Other Criminal Activity', description: 'Other street crimes or illegal activities' }
   ]
 
   const getSeverityColor = (level) => {
@@ -229,7 +210,7 @@ function ReportPage() {
           </p>
         </div>
 
-        {/* Location Status Section (RESTORED from original) */}
+        {/* Location Status Section */}
         <div className="card mb-6">
           <div className="card-body">
             <h3 className="font-medium text-neutral-800 mb-3 flex items-center">
@@ -237,29 +218,14 @@ function ReportPage() {
               Location Services
             </h3>
             
-            {!userLocation && !locationLoading && !locationError && (
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-700 mb-3">
-                  📍 For better accuracy, allow location access to automatically detect your area.
-                </p>
-                <button 
-                  onClick={getCurrentLocation}
-                  className="btn-primary btn-sm"
-                >
-                  <Navigation className="w-4 h-4 mr-2" />
-                  Get My Location
-                </button>
-              </div>
-            )}
-
             {locationLoading && (
               <div className="bg-blue-50 p-4 rounded-lg flex items-center">
-                <div className="loading-spinner w-4 h-4 mr-3"></div>
-                <span className="text-blue-700">Getting your location...</span>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
+                <span className="text-blue-700">Detecting your location...</span>
               </div>
             )}
 
-            {userLocation && (
+            {userLocation && !locationLoading && (
               <div className="bg-green-50 p-4 rounded-lg">
                 <div className="flex items-center">
                   <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
@@ -271,25 +237,25 @@ function ReportPage() {
                   )}
                 </div>
                 <p className="text-sm text-green-600 mt-1">
-                  Your report will use your current area (location is obfuscated for privacy)
+                  Your report will use your current area (coordinates are obfuscated for privacy)
                 </p>
               </div>
             )}
 
-            {locationError && (
-              <div className="bg-yellow-50 p-4 rounded-lg">
-                <div className="flex items-center">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
-                  <span className="text-yellow-700 font-medium">Location unavailable</span>
-                </div>
-                <p className="text-sm text-yellow-600 mt-1">{locationError}</p>
-                <p className="text-sm text-yellow-600">No worries - you can still submit a report with manual location selection below.</p>
+            {!userLocation && !locationLoading && (
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-700 mb-3">
+                  📍 For better accuracy, you can select your location using the options below.
+                </p>
+                <p className="text-xs text-blue-600">
+                  Don't worry - your exact location is never stored for privacy protection.
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Success Message (RESTORED) */}
+        {/* Success Message */}
         {success && (
           <div className="alert-success mb-6 animate-slide-up">
             <div className="flex items-start">
@@ -310,7 +276,7 @@ function ReportPage() {
           </div>
         )}
 
-        {/* Error Message (RESTORED) */}
+        {/* Error Message */}
         {error && (
           <div className="alert-danger mb-6">
             <div className="flex items-start">
@@ -334,63 +300,87 @@ function ReportPage() {
           <div className="card-body">
             <form onSubmit={handleSubmit} className="space-y-6">
               
-              {/* Incident Type (Enhanced with visual cards) */}
+              {/* Incident Type - FIXED: Now using dropdown */}
               <div>
                 <label className="form-label">
                   <AlertTriangle className="w-4 h-4 text-bangladesh-green" />
-                  Type of Incident
+                  Type of Incident *
                 </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                  {incidentTypes.map((type) => (
-                    <label 
-                      key={type.value}
-                      className={`incident-type-card ${formData.type === type.value ? 'selected' : ''}`}
-                    >
-                      <input 
-                        type="radio" 
-                        name="type" 
+                <div className="relative">
+                  <select
+                    className={`form-select appearance-none ${formErrors.type ? 'border-red-500' : ''}`}
+                    value={formData.type}
+                    onChange={(e) => {
+                      setFormData({...formData, type: e.target.value})
+                      if (formErrors.type) {
+                        setFormErrors(prev => ({ ...prev, type: null }))
+                      }
+                    }}
+                    required
+                  >
+                    {incidentTypes.map((type) => (
+                      <option 
+                        key={type.value} 
                         value={type.value}
-                        checked={formData.type === type.value}
-                        onChange={(e) => setFormData({...formData, type: e.target.value})}
-                        className="sr-only"
-                        required
-                      />
-                      <div className="flex items-center">
-                        <span className="text-2xl mr-3">{type.icon}</span>
-                        <span className="font-medium">{type.label}</span>
-                      </div>
-                    </label>
-                  ))}
+                        disabled={type.disabled}
+                      >
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
                 </div>
+                {formErrors.type && (
+                  <p className="text-red-600 text-sm mt-1">{formErrors.type}</p>
+                )}
+                
+                {/* Show description for selected type */}
+                {formData.type && (
+                  <div className="mt-2 p-3 bg-neutral-50 rounded-lg">
+                    <p className="text-sm text-neutral-600">
+                      {incidentTypes.find(t => t.value === formData.type)?.description}
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* Description (RESTORED with character counter) */}
+              {/* Description - Enhanced with better validation */}
               <div>
                 <label className="form-label">
                   <Send className="w-4 h-4 text-bangladesh-green" />
-                  Description
+                  Description *
                   <span className="text-xs text-neutral-500 ml-2">(minimum 10 characters)</span>
                 </label>
                 <textarea 
-                  className="form-textarea h-32"
+                  className={`form-textarea h-32 ${formErrors.description ? 'border-red-500' : ''}`}
                   placeholder="Describe what happened, when it occurred, and any other relevant details..."
                   value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, description: e.target.value})
+                    if (formErrors.description) {
+                      setFormErrors(prev => ({ ...prev, description: null }))
+                    }
+                  }}
                   minLength={10}
                   maxLength={1000}
                   required
                 />
-                <div className="text-xs text-neutral-400 mt-1">
-                  {formData.description.length}/1000 characters
+                <div className="flex justify-between text-xs mt-1">
+                  <span className={formErrors.description ? 'text-red-600' : 'text-neutral-400'}>
+                    {formErrors.description || `${formData.description.length}/1000 characters`}
+                  </span>
+                  {formData.description.length >= 10 && (
+                    <span className="text-green-600">✓ Minimum length met</span>
+                  )}
                 </div>
               </div>
 
-              {/* Location Selection - HYBRID APPROACH */}
+              {/* Location Selection - Enhanced with better integration */}
               <div>
                 <label className="form-label mb-3">
                   <span className="flex items-center">
                     <MapPin className="w-4 h-4 text-bangladesh-green" />
-                    Location Selection
+                    Location Selection *
                   </span>
                 </label>
                 
@@ -401,7 +391,7 @@ function ReportPage() {
                   className="mb-4"
                 />
 
-                {/* Manual location description (enhanced) */}
+                {/* Manual location description */}
                 <div className="mt-4">
                   <label className="text-sm font-medium text-neutral-700 mb-2 block">
                     Additional Location Details
@@ -409,14 +399,22 @@ function ReportPage() {
                   <div className="input-with-icon">
                     <input 
                       type="text" 
-                      className="form-input"
+                      className={`form-input ${formErrors.location ? 'border-red-500' : ''}`}
                       placeholder="Enter area, landmark, or general location (e.g., Dhanmondi Area)"
                       value={formData.location}
-                      onChange={(e) => setFormData({...formData, location: e.target.value})}
+                      onChange={(e) => {
+                        setFormData({...formData, location: e.target.value})
+                        if (formErrors.location) {
+                          setFormErrors(prev => ({ ...prev, location: null }))
+                        }
+                      }}
                       required
                     />
                     <MapPin className="icon" />
                   </div>
+                  {formErrors.location && (
+                    <p className="text-red-600 text-sm mt-1">{formErrors.location}</p>
+                  )}
                   <p className="text-xs text-neutral-500 mt-1">
                     📍 {selectedLocation || userLocation 
                       ? 'Your selected location will be used and obfuscated for privacy' 
@@ -426,12 +424,12 @@ function ReportPage() {
                 </div>
               </div>
 
-              {/* Severity Level (RESTORED with detailed descriptions) */}
+              {/* Severity Level - Enhanced */}
               <div>
                 <label className="form-label justify-between">
                   <span className="flex items-center">
                     <AlertTriangle className="w-4 h-4 text-bangladesh-green" />
-                    Severity Level
+                    Severity Level *
                   </span>
                   <span className={`px-3 py-1 rounded-full text-xs font-medium text-white ${getSeverityColor(formData.severity)}`}>
                     {getSeverityLabel(formData.severity)}
@@ -445,7 +443,12 @@ function ReportPage() {
                     max="5" 
                     className="w-full"
                     value={formData.severity}
-                    onChange={(e) => setFormData({...formData, severity: parseInt(e.target.value)})}
+                    onChange={(e) => {
+                      setFormData({...formData, severity: parseInt(e.target.value)})
+                      if (formErrors.severity) {
+                        setFormErrors(prev => ({ ...prev, severity: null }))
+                      }
+                    }}
                   />
                   <div className="flex justify-between text-sm text-neutral-500 mt-2">
                     <span>1 - Minor</span>
@@ -454,7 +457,7 @@ function ReportPage() {
                   </div>
                 </div>
 
-                {/* Severity Description (RESTORED from original) */}
+                {/* Severity Description */}
                 <div className="mt-3 p-3 rounded-lg bg-neutral-50">
                   <div className="text-sm text-neutral-600">
                     {formData.severity <= 2 && (
@@ -483,14 +486,17 @@ function ReportPage() {
                     )}
                   </div>
                 </div>
+                {formErrors.severity && (
+                  <p className="text-red-600 text-sm mt-1">{formErrors.severity}</p>
+                )}
               </div>
 
-              {/* Submit Button (RESTORED original styling) */}
+              {/* Submit Button - Enhanced */}
               <button 
                 type="submit" 
-                disabled={submitting || !formData.type || !formData.description}
+                disabled={submitting || Object.keys(formErrors).length > 0}
                 className={`btn-secondary w-full py-4 text-lg ${
-                  submitting || !formData.type || !formData.description 
+                  submitting || Object.keys(formErrors).length > 0
                     ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
@@ -510,7 +516,7 @@ function ReportPage() {
           </div>
         </div>
 
-        {/* Privacy Notice (RESTORED) */}
+        {/* Privacy Notice */}
         <div className="alert-info">
           <div className="flex items-start">
             <Shield className="w-5 h-5 mr-3 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -524,7 +530,7 @@ function ReportPage() {
           </div>
         </div>
 
-        {/* Emergency Notice (RESTORED) */}
+        {/* Emergency Notice */}
         <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
           <div className="flex items-start">
             <AlertTriangle className="w-5 h-5 mr-3 text-red-600 flex-shrink-0 mt-0.5" />

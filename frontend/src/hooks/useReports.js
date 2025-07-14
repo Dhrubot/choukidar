@@ -13,6 +13,7 @@ export function useReports() {
     try {
       const data = await apiService.getReports()
       setReports(data.data || [])
+      console.log(data)
     } catch (err) {
       setError(err.message)
     } finally {

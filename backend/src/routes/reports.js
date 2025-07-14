@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
   try {
     const { includeFlagged = false } = req.query;
     
-    let query = { status: 'approved' };
+    let query = { };
     
     // Filter out potentially suspicious reports for public view unless specifically requested
     if (!includeFlagged) {

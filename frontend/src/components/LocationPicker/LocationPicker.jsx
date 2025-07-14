@@ -1,6 +1,6 @@
-// === src/components/LocationPicker/LocationPicker.jsx (Using locationConfig.js) ===
+// === src/components/LocationPicker/LocationPicker.jsx (IMPROVED - Better mobile UX) ===
 import { useState, useEffect, useRef } from 'react'
-import { MapPin, Search, Navigation, Check, AlertCircle } from 'lucide-react'
+import { MapPin, Search, Navigation, Check, AlertCircle, X } from 'lucide-react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import useGeocoding from '../../hooks/useGeocoding'
@@ -24,7 +24,8 @@ const LocationPicker = ({
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [selectedLocation, setSelectedLocation] = useState(initialLocation)
-  const [mapCenter, setMapCenter] = useState(mapOptions.defaultCenter) // Using config
+  const [mapCenter, setMapCenter] = useState(mapOptions.defaultCenter)
+  const [gpsLoading, setGpsLoading] = useState(false)
   
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
@@ -41,7 +42,7 @@ const LocationPicker = ({
     error: geocodingError 
   } = useGeocoding()
 
-  // Initialize map when expanded using configuration
+  // Initialize map when expanded
   useEffect(() => {
     if (!isExpanded || !mapRef.current || mapInstanceRef.current) return
 
@@ -168,7 +169,7 @@ const LocationPicker = ({
     }
   }
 
-  // Search for locations using config
+  // Search for locations
   const searchLocations = async (query) => {
     if (!query.trim() || query.length < geocodingOptions.searchBehavior.minQueryLength) {
       setSearchResults([])
@@ -187,7 +188,7 @@ const LocationPicker = ({
     }
   }
 
-  // Handle search input with debouncing using config
+  // Handle search input with debouncing
   const handleSearchInput = (value) => {
     setSearchQuery(value)
     
@@ -196,14 +197,15 @@ const LocationPicker = ({
       clearTimeout(searchTimeoutRef.current)
     }
     
-    // Debounce search using configuration
+    // Debounce search
     searchTimeoutRef.current = setTimeout(() => {
       searchLocations(value)
     }, geocodingOptions.searchBehavior.debounceMs)
   }
 
-  // Use current GPS location
+  // Use current GPS location - IMPROVED with better UX
   const useCurrentLocation = async () => {
+    setGpsLoading(true)
     try {
       const position = await getCurrentPosition()
       await handleLocationSelect({ lat: position.lat, lng: position.lng }, 'GPS')
@@ -211,6 +213,22 @@ const LocationPicker = ({
     } catch (error) {
       console.error('GPS error:', error)
       alert(error.message || 'Unable to get your current location')
+    } finally {
+      setGpsLoading(false)
+    }
+  }
+
+  // Clear all location data
+  const clearLocation = () => {
+    setSelectedLocation(null)
+    setSearchQuery('')
+    setSearchResults([])
+    if (markerRef.current && mapInstanceRef.current) {
+      mapInstanceRef.current.removeLayer(markerRef.current)
+      markerRef.current = null
+    }
+    if (onLocationSelect) {
+      onLocationSelect(null)
     }
   }
 
@@ -219,12 +237,12 @@ const LocationPicker = ({
       {/* Compact Display */}
       <div className="border border-neutral-200 rounded-lg p-4 bg-white">
         <div className="flex items-center justify-between">
-          <div className="flex items-center flex-1">
-            <MapPin className="w-5 h-5 text-bangladesh-green mr-3" />
-            <div className="flex-1">
+          <div className="flex items-center flex-1 min-w-0">
+            <MapPin className="w-5 h-5 text-bangladesh-green mr-3 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
               {selectedLocation ? (
                 <div>
-                  <div className="font-medium text-neutral-800">
+                  <div className="font-medium text-neutral-800 flex items-center">
                     📍 Location Selected
                     {selectedLocation.withinBangladesh === false && (
                       <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
@@ -232,7 +250,7 @@ const LocationPicker = ({
                       </span>
                     )}
                   </div>
-                  <div className="text-sm text-neutral-600 mt-1">
+                  <div className="text-sm text-neutral-600 mt-1 truncate">
                     {selectedLocation.address}
                   </div>
                   <div className="text-xs text-neutral-400 mt-1">
@@ -252,24 +270,41 @@ const LocationPicker = ({
             </div>
           </div>
           
-          <button
-            type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="btn-secondary btn-sm ml-3"
-          >
-            {isExpanded ? 'Collapse' : 'Choose'}
-          </button>
+          <div className="flex items-center space-x-2 ml-3">
+            {selectedLocation && (
+              <button
+                type="button"
+                onClick={clearLocation}
+                className="p-2 text-neutral-400 hover:text-red-500 transition-colors"
+                title="Clear location"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="btn-secondary btn-sm"
+            >
+              {isExpanded ? 'Collapse' : 'Choose'}
+            </button>
+          </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions - IMPROVED mobile layout */}
         {!isExpanded && (
-          <div className="flex gap-2 mt-3">
+          <div className="flex flex-wrap gap-2 mt-3">
             <button
               type="button"
               onClick={useCurrentLocation}
+              disabled={gpsLoading}
               className="btn-primary btn-sm flex items-center"
             >
-              <Navigation className="w-4 h-4 mr-1" />
+              {gpsLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-1"></div>
+              ) : (
+                <Navigation className="w-4 h-4 mr-1" />
+              )}
               Use GPS
             </button>
             
@@ -318,14 +353,14 @@ const LocationPicker = ({
             {/* Geocoding Error */}
             {geocodingError && (
               <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-center">
-                <AlertCircle className="w-4 h-4 mr-2" />
-                {geocodingError}
+                <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+                <span>{geocodingError}</span>
               </div>
             )}
 
-            {/* Search Results */}
+            {/* Search Results - IMPROVED mobile scrolling */}
             {searchResults.length > 0 && (
-              <div className="mt-3 max-h-32 overflow-y-auto">
+              <div className="mt-3 max-h-40 overflow-y-auto">
                 {searchResults.map((result) => (
                   <button
                     key={result.id}
@@ -335,10 +370,10 @@ const LocationPicker = ({
                       setSearchQuery('')
                       setSearchResults([])
                     }}
-                    className="w-full text-left p-2 hover:bg-neutral-50 rounded text-sm border-b border-neutral-100 last:border-b-0"
+                    className="w-full text-left p-3 hover:bg-neutral-50 rounded text-sm border-b border-neutral-100 last:border-b-0 transition-colors"
                   >
-                    <div className="font-medium text-neutral-800">{result.name.split(',')[0]}</div>
-                    <div className="text-neutral-600 text-xs">{result.name}</div>
+                    <div className="font-medium text-neutral-800 truncate">{result.name.split(',')[0]}</div>
+                    <div className="text-neutral-600 text-xs truncate">{result.name}</div>
                   </button>
                 ))}
               </div>
@@ -353,47 +388,41 @@ const LocationPicker = ({
               style={{ zIndex: 1 }}
             />
             
-            {/* Map Instructions Overlay */}
-            <div className="absolute top-3 left-3 bg-white bg-opacity-90 rounded-lg p-2 text-xs text-neutral-600 max-w-xs">
+            {/* Map Instructions Overlay - IMPROVED mobile positioning */}
+            <div className="absolute top-2 left-2 right-2 sm:top-3 sm:left-3 sm:right-auto sm:max-w-xs bg-white bg-opacity-90 rounded-lg p-2 text-xs text-neutral-600">
               💡 Click anywhere on the map to set location, or drag the red marker
             </div>
 
-            {/* GPS Button on Map */}
+            {/* GPS Button on Map - IMPROVED mobile size */}
             <button
               type="button"
               onClick={useCurrentLocation}
-              className="absolute bottom-3 right-3 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-lg p-2 shadow-md"
+              disabled={gpsLoading}
+              className="absolute bottom-3 right-3 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-lg p-2 shadow-md transition-colors"
               title="Use my current location"
             >
-              <Navigation className="w-4 h-4 text-bangladesh-green" />
+              {gpsLoading ? (
+                <div className="animate-spin w-4 h-4 border-2 border-bangladesh-green border-t-transparent rounded-full"></div>
+              ) : (
+                <Navigation className="w-4 h-4 text-bangladesh-green" />
+              )}
             </button>
           </div>
 
-          {/* Actions */}
-          <div className="p-3 bg-neutral-50 flex justify-between items-center">
+          {/* Actions - IMPROVED mobile layout */}
+          <div className="p-3 bg-neutral-50 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                setSelectedLocation(null)
-                setSearchQuery('')
-                setSearchResults([])
-                if (markerRef.current && mapInstanceRef.current) {
-                  mapInstanceRef.current.removeLayer(markerRef.current)
-                  markerRef.current = null
-                }
-                if (onLocationSelect) {
-                  onLocationSelect(null)
-                }
-              }}
-              className="btn-secondary btn-sm"
+              onClick={clearLocation}
+              className="btn-secondary btn-sm order-2 sm:order-1"
             >
-              Clear
+              Clear Location
             </button>
 
             <button
               type="button"
               onClick={() => setIsExpanded(false)}
-              className="btn-primary btn-sm flex items-center"
+              className="btn-primary btn-sm flex items-center justify-center order-1 sm:order-2"
             >
               <Check className="w-4 h-4 mr-1" />
               Done
