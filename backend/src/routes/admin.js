@@ -1,14 +1,16 @@
-// === backend/src/routes/admin.js (Enhanced with security features) ===
+// === backend/src/routes/admin.js (FIXED - Proper All Reports Endpoint) ===
 const express = require('express');
 const router = express.Router();
 const Report = require('../models/Report');
 
-// GET all pending reports (admin only) - ORIGINAL FUNCTIONALITY PRESERVED
+// GET pending reports (admin only) - ORIGINAL FUNCTIONALITY PRESERVED
 router.get('/reports', async (req, res) => {
   try {
     const reports = await Report.find({ status: 'pending' })
       .select('+location.originalCoordinates') // Show original coordinates to admins
-      .sort({ timestamp: -1 });
+      .sort({ timestamp: -1, createdAt: -1 });
+    
+    console.log(`✅ Found ${reports.length} pending reports for admin`);
     
     res.json({
       success: true,
@@ -25,12 +27,15 @@ router.get('/reports', async (req, res) => {
   }
 });
 
-// GET all reports (admin only) - ORIGINAL FUNCTIONALITY PRESERVED
+// GET all reports (admin only) - FIXED TO RETURN ALL REPORTS
 router.get('/reports/all', async (req, res) => {
   try {
-    const reports = await Report.find()
+    // Fetch ALL reports regardless of status - THIS IS THE KEY FIX
+    const reports = await Report.find({}) // Remove any status filter
       .select('+location.originalCoordinates') // Show original coordinates to admins
-      .sort({ timestamp: -1 });
+      .sort({ timestamp: -1, createdAt: -1 }); // Sort by newest first
+    
+    console.log(`✅ Found ${reports.length} total reports for admin (pending: ${reports.filter(r => r.status === 'pending').length}, approved: ${reports.filter(r => r.status === 'approved').length}, rejected: ${reports.filter(r => r.status === 'rejected').length})`);
     
     res.json({
       success: true,
@@ -76,6 +81,8 @@ router.put('/reports/:id', async (req, res) => {
       });
     }
 
+    console.log(`✅ Report ${req.params.id} ${status} successfully`);
+
     res.json({
       success: true,
       message: `Report ${status} successfully`,
@@ -91,7 +98,7 @@ router.put('/reports/:id', async (req, res) => {
   }
 });
 
-// GET admin dashboard stats - ENHANCED with security metrics
+// GET admin dashboard stats - ENHANCED with better logging
 router.get('/dashboard', async (req, res) => {
   try {
     // Original stats preserved
@@ -102,7 +109,7 @@ router.get('/dashboard', async (req, res) => {
       rejected: await Report.countDocuments({ status: 'rejected' })
     };
 
-    // Enhanced security stats (new)
+    // Enhanced security stats
     const securityStats = {
       crossBorderReports: await Report.countDocuments({ 'securityFlags.crossBorderReport': true }),
       potentialSpam: await Report.countDocuments({ 'securityFlags.potentialSpam': true }),
@@ -116,7 +123,7 @@ router.get('/dashboard', async (req, res) => {
       })
     };
 
-    // Location source breakdown (new)
+    // Location source breakdown
     const sourceBreakdown = await Report.aggregate([
       {
         $group: {
@@ -126,12 +133,14 @@ router.get('/dashboard', async (req, res) => {
       }
     ]);
 
+    console.log(`✅ Dashboard stats: Total: ${basicStats.total}, Pending: ${basicStats.pending}, Approved: ${basicStats.approved}, Rejected: ${basicStats.rejected}`);
+
     res.json({
       success: true,
       data: {
         ...basicStats, // Original stats maintained
-        security: securityStats, // New security insights
-        sourceBreakdown // New location source analytics
+        security: securityStats, // Security insights
+        sourceBreakdown // Location source analytics
       }
     });
   } catch (error) {
@@ -144,7 +153,7 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// NEW: GET reports with security flags (additional admin feature)
+// GET reports with security flags (additional admin feature)
 router.get('/reports/flagged', async (req, res) => {
   try {
     const flaggedReports = await Report.find({
@@ -155,7 +164,9 @@ router.get('/reports/flagged', async (req, res) => {
       ]
     })
     .select('+location.originalCoordinates') // Include original coordinates for admins
-    .sort({ timestamp: -1 });
+    .sort({ timestamp: -1, createdAt: -1 });
+    
+    console.log(`✅ Found ${flaggedReports.length} flagged reports for admin`);
     
     res.json({
       success: true,
@@ -172,7 +183,7 @@ router.get('/reports/flagged', async (req, res) => {
   }
 });
 
-// NEW: GET security analytics for admin monitoring
+// GET security analytics for admin monitoring
 router.get('/analytics/security', async (req, res) => {
   try {
     const analytics = await Report.aggregate([
@@ -216,6 +227,8 @@ router.get('/analytics/security', async (req, res) => {
         }
       }
     ]);
+
+    console.log(`✅ Security analytics generated successfully`);
 
     res.json({
       success: true,
