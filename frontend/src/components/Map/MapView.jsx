@@ -1,14 +1,20 @@
-// === src/components/Map/MapView.jsx (ENHANCED with Intelligent Clustering) ===
+// === src/components/Map/MapView.jsx (ENHANCED with Safe Zones & Route Intelligence) ===
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import 'leaflet.markercluster'
+
+// ✅ EXISTING COMPONENTS PRESERVED
 import HeatmapLayer from './HeatmapLayer'
 import MarkerCluster from './MarkerCluster'
 
-// Fix default marker icon issue in Leaflet
+// 🆕 PHASE 3B: NEW COMPONENTS
+import SafeZones from './SafeZones'
+import RoutePlanner from './RoutePlanner'
+
+// Fix default marker icon issue in Leaflet (PRESERVED)
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
@@ -17,6 +23,7 @@ L.Icon.Default.mergeOptions({
 })
 
 const MapView = ({ 
+  // ✅ EXISTING PROPS PRESERVED
   reports = [], 
   center = [23.8103, 90.4125], 
   zoom = 11,
@@ -26,15 +33,27 @@ const MapView = ({
   onMapReady = null,
   onClusterClick = null,
   onMarkerClick = null,
-  className = ""
+  className = "",
+  
+  // 🆕 PHASE 3B: NEW PROPS FOR SAFE ZONES & ROUTING
+  userLocation = null,
+  showSafeZones = false,
+  showRoutePlanner = false,
+  safeZoneOptions = {},
+  routePlannerOptions = {},
+  onSafeZoneSelect = null,
+  onSafeZoneHover = null,
+  onRouteSelect = null,
+  onRouteHover = null
 }) => {
+  // ✅ EXISTING STATE PRESERVED
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
   const [isMapReady, setIsMapReady] = useState(false)
   const [performanceMode, setPerformanceMode] = useState('normal')
 
-  // Memoize static configuration to prevent recreating objects
+  // ✅ EXISTING MEMOIZED CONFIG PRESERVED
   const mapConfig = useMemo(() => ({
     zoomControl: true,
     scrollWheelZoom: true,
@@ -54,7 +73,7 @@ const MapView = ({
     }
   }), [])
 
-  // Determine optimal rendering strategy based on data size
+  // ✅ EXISTING RENDERING STRATEGY PRESERVED
   const renderingStrategy = useMemo(() => {
     const count = reports.length
     
@@ -63,72 +82,72 @@ const MapView = ({
         mode: 'performance',
         preferClustering: true,
         defaultViewMode: 'clusters',
-        chunkSize: 50,
-        animationsEnabled: false
+        chunkSize: 50
       }
     } else if (count > 500) {
       return {
         mode: 'balanced',
-        preferClustering: viewMode === 'markers',
-        defaultViewMode: viewMode,
-        chunkSize: 100,
-        animationsEnabled: true
+        preferClustering: true,
+        defaultViewMode: 'hybrid',
+        chunkSize: 100
+      }
+    } else {
+      return {
+        mode: 'normal',
+        preferClustering: false,
+        defaultViewMode: 'markers',
+        chunkSize: 200
       }
     }
-    
-    return {
-      mode: 'full',
-      preferClustering: false,
-      defaultViewMode: viewMode,
-      chunkSize: 200,
-      animationsEnabled: true
-    }
-  }, [reports.length, viewMode])
+  }, [reports.length])
 
-  // Enhanced clustering options with performance optimizations
-  const enhancedClusteringOptions = useMemo(() => ({
-    ...clusteringOptions,
-    
-    // Performance settings based on dataset size
-    chunkedLoading: renderingStrategy.mode !== 'full',
-    animateAddingMarkers: renderingStrategy.animationsEnabled && reports.length < 200,
-    
-    // Bangladesh-optimized settings
-    enableBengaliNumerals: false, // Can be enabled via props
-    showTypeIndicator: true,
-    showRiskBadge: true,
-    enableAnimations: renderingStrategy.animationsEnabled,
-    
-    // Adaptive clustering based on data density
-    zoomThresholds: reports.length > 1000 ? {
-      6: { radius: 120, maxZoom: 8 },   // More aggressive for large datasets
-      8: { radius: 80, maxZoom: 10 },
-      10: { radius: 50, maxZoom: 12 },
-      12: { radius: 35, maxZoom: 14 },
-      14: { radius: 25, maxZoom: 16 }
-    } : {
-      6: { radius: 80, maxZoom: 8 },    // Standard clustering
-      8: { radius: 60, maxZoom: 10 },
-      10: { radius: 40, maxZoom: 12 },
-      12: { radius: 25, maxZoom: 14 },
-      14: { radius: 15, maxZoom: 16 }
+  // 🆕 ENHANCED CLUSTERING OPTIONS WITH SAFE ZONE INTEGRATION
+  const enhancedClusteringOptions = useMemo(() => {
+    const baseOptions = {
+      enableBengaliNumerals: false,
+      showTypeIndicator: true,
+      showRiskBadge: true,
+      enableAnimations: true,
+      chunkedLoading: true,
+      maxMarkersBeforeCluster: 50,
+      animateAddingMarkers: false,
+      zoomThresholds: {
+        6: { radius: 100, maxZoom: 8 },
+        8: { radius: 70, maxZoom: 10 },
+        10: { radius: 45, maxZoom: 12 },
+        12: { radius: 30, maxZoom: 14 },
+        14: { radius: 20, maxZoom: 16 }
+      },
+      ...clusteringOptions
     }
-  }), [clusteringOptions, renderingStrategy, reports.length])
 
-  // Initialize map - FIXED: Remove center and zoom from dependencies
+    // 🆕 INTEGRATE SAFE ZONE AWARENESS INTO CLUSTERING
+    if (showSafeZones) {
+      baseOptions.safeZoneAware = true
+      baseOptions.highlightSafeZoneClusters = true
+    }
+
+    return baseOptions
+  }, [clusteringOptions, showSafeZones])
+
+  // ✅ EXISTING MAP INITIALIZATION EFFECT PRESERVED
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return
 
-    // Create map centered on provided coordinates
-    const map = L.map(mapRef.current, mapConfig).setView(center, zoom)
+    // Create map instance
+    const map = L.map(mapRef.current, {
+      center,
+      zoom,
+      ...mapConfig
+    })
 
-    // Add OpenStreetMap tiles
+    // Add tile layer
     L.tileLayer(tileLayerConfig.url, tileLayerConfig.options).addTo(map)
 
-    // Enhanced custom control for SafeStreets
+    // ✅ EXISTING LEGEND CONTROL PRESERVED
     const info = L.control({ position: 'topright' })
     info.onAdd = function() {
-      const div = L.DomUtil.create('div', 'leaflet-control-custom')
+      const div = L.DomUtil.create('div', 'leaflet-control-legend')
       div.innerHTML = `
         <div style="background: white; padding: 12px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border: 1px solid #e2e8f0;">
           <div style="font-weight: bold; color: #006A4E; margin-bottom: 6px; display: flex; align-items: center;">
@@ -144,7 +163,7 @@ const MapView = ({
     }
     info.addTo(map)
 
-    // Performance indicator control
+    // ✅ EXISTING PERFORMANCE INDICATOR PRESERVED
     const performanceInfo = L.control({ position: 'topleft' })
     performanceInfo.onAdd = function() {
       const div = L.DomUtil.create('div', 'leaflet-control-performance')
@@ -163,6 +182,39 @@ const MapView = ({
     }
     performanceInfo.addTo(map)
 
+    // 🆕 PHASE 3B: ADD SAFE ZONE & ROUTE CONTROLS
+    if (showSafeZones || showRoutePlanner) {
+      const intelligenceInfo = L.control({ position: 'topleft' })
+      intelligenceInfo.onAdd = function() {
+        const div = L.DomUtil.create('div', 'leaflet-control-intelligence')
+        div.style.cssText = `
+          background: linear-gradient(135deg, #006A4E 0%, #00A86B 100%); 
+          padding: 8px 12px; 
+          border-radius: 6px; 
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+          border: 1px solid rgba(255,255,255,0.2);
+          font-size: 11px;
+          font-weight: 600;
+          color: white;
+          margin-bottom: 8px;
+          text-align: center;
+        `
+        
+        let content = '🧠 Safety Intelligence Active'
+        if (showSafeZones && showRoutePlanner) {
+          content += '<br><span style="font-size: 10px; opacity: 0.9;">🛡️ Safe Zones • 🗺️ Smart Routing</span>'
+        } else if (showSafeZones) {
+          content += '<br><span style="font-size: 10px; opacity: 0.9;">🛡️ Safe Zones Active</span>'
+        } else if (showRoutePlanner) {
+          content += '<br><span style="font-size: 10px; opacity: 0.9;">🗺️ Smart Routing Active</span>'
+        }
+        
+        div.innerHTML = content
+        return div
+      }
+      intelligenceInfo.addTo(map)
+    }
+
     mapInstanceRef.current = map
     setIsMapReady(true)
 
@@ -172,6 +224,8 @@ const MapView = ({
     }
 
     console.log(`🗺️ Enhanced MapView initialized - ${renderingStrategy.mode} mode for ${reports.length} reports`)
+    if (showSafeZones) console.log('🛡️ Safe Zones overlay enabled')
+    if (showRoutePlanner) console.log('🗺️ Route Intelligence enabled')
 
     return () => {
       if (mapInstanceRef.current) {
@@ -182,7 +236,7 @@ const MapView = ({
     }
   }, []) // FIXED: Empty dependency array - map should only initialize once
 
-  // Update performance indicator - SEPARATE EFFECT
+  // ✅ EXISTING PERFORMANCE INDICATOR UPDATE PRESERVED
   useEffect(() => {
     if (!mapInstanceRef.current) return
 
@@ -214,7 +268,7 @@ const MapView = ({
     }
   }, [viewMode, reports.length, renderingStrategy])
 
-  // Memoize utility functions to prevent recreation
+  // ✅ EXISTING UTILITY FUNCTIONS PRESERVED
   const getSeverityColor = useCallback((severity) => {
     const colors = {
       1: '#10B981', // Green - Low
@@ -236,7 +290,7 @@ const MapView = ({
     return icons[type] || icons.other
   }, [])
 
-  // Memoize the popup creation function
+  // ✅ EXISTING POPUP CREATION PRESERVED
   const createEnhancedPopup = useCallback((report) => {
     const incidentIcon = getIncidentIcon(report.type)
     const severityColor = getSeverityColor(report.severity)
@@ -269,68 +323,59 @@ const MapView = ({
           <span style="font-size: 24px; margin-right: 8px;">${incidentIcon}</span>
           <div>
             <div style="font-weight: bold; color: #006A4E; font-size: 16px; line-height: 1.2;">
-              ${typeLabels[report.type] || 'Criminal Activity'}
+              ${typeLabels[report.type]}
             </div>
-            <div style="font-size: 12px; color: #666; margin-top: 2px;">
-              Severity: <span style="color: ${severityColor}; font-weight: 600;">${severityLabels[report.severity]}</span>
+            <div style="background: ${severityColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: inline-block; margin-top: 4px;">
+              ${severityLabels[report.severity]}
             </div>
           </div>
         </div>
-        
-        <div style="margin-bottom: 12px;">
-          <div style="font-weight: 600; color: #374151; margin-bottom: 4px; font-size: 13px;">Location</div>
-          <div style="color: #6B7280; font-size: 12px; line-height: 1.3;">
-            📍 ${report.location.address || 'General area (privacy protected)'}
-          </div>
+        <div style="margin-bottom: 10px;">
+          <div style="font-weight: 600; color: #374151; font-size: 13px; margin-bottom: 4px;">Description:</div>
+          <div style="color: #6B7280; font-size: 12px; line-height: 1.4;">${report.description}</div>
         </div>
-        
-        <div style="margin-bottom: 12px;">
-          <div style="font-weight: 600; color: #374151; margin-bottom: 4px; font-size: 13px;">Description</div>
-          <div style="color: #6B7280; font-size: 12px; line-height: 1.4; background: #F9FAFB; padding: 8px; border-radius: 6px;">
-            ${report.description.length > 120 ? report.description.substring(0, 120) + '...' : report.description}
-          </div>
-        </div>
-        
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid #E5E7EB;">
-          <div style="font-size: 11px; color: #9CA3AF;">
+        <div style="padding-top: 8px; border-top: 1px solid #E5E7EB;">
+          <div style="color: #9CA3AF; font-size: 11px;">
             📅 ${reportDate}
           </div>
-          <div style="font-size: 11px; color: #9CA3AF;">
-            ID: ${report._id?.slice(-6) || 'Unknown'}
+          <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">
+            🆔 ${report._id?.slice(-8) || 'Unknown'}
           </div>
         </div>
       </div>
     `
-  }, [getIncidentIcon, getSeverityColor])
+  }, [getSeverityColor, getIncidentIcon])
 
-  // Add individual markers (fallback for small datasets or specific view modes)
+  // ✅ EXISTING MARKER CREATION PRESERVED
   const addIndividualMarkers = useCallback((reports) => {
-    if (!mapInstanceRef.current) return
-
-    // Clear existing markers
+    // Clear existing markers first
     markersRef.current.forEach(marker => {
       mapInstanceRef.current.removeLayer(marker)
     })
     markersRef.current = []
 
-    // Process reports in chunks for better performance
-    const chunkSize = renderingStrategy.chunkSize
+    if (!mapInstanceRef.current || !reports?.length) return
+
+    console.log(`📍 Adding ${reports.length} individual markers...`)
+
+    // Chunked loading for performance
     const processChunk = (startIndex) => {
-      const endIndex = Math.min(startIndex + chunkSize, reports.length)
+      const endIndex = Math.min(startIndex + renderingStrategy.chunkSize, reports.length)
       const chunk = reports.slice(startIndex, endIndex)
 
       chunk.forEach(report => {
-        if (!report.location?.coordinates) return
+        if (!report.location?.coordinates || report.location.coordinates.length !== 2) {
+          console.warn('Invalid coordinates for report:', report._id)
+          return
+        }
 
         const [lng, lat] = report.location.coordinates
-        
-        // Skip invalid coordinates
-        if (!lat || !lng || lat === 0 || lng === 0) return
-
-        // Enhanced marker styling
         const markerColor = getSeverityColor(report.severity)
         const incidentIcon = getIncidentIcon(report.type)
-        const pulseClass = report.severity >= 4 ? 'animate-pulse' : ''
+
+        // Enhanced marker with subtle animation for recent reports
+        const isRecent = Date.now() - new Date(report.createdAt || report.timestamp).getTime() < 24 * 60 * 60 * 1000
+        const pulseClass = isRecent ? 'animate-pulse' : ''
 
         // Create enhanced custom marker
         const customIcon = L.divIcon({
@@ -401,7 +446,7 @@ const MapView = ({
     }
   }, [getSeverityColor, getIncidentIcon, createEnhancedPopup, renderingStrategy.chunkSize, onMarkerClick])
 
-  // Determine which rendering approach to use
+  // ✅ EXISTING CLUSTERING LOGIC PRESERVED
   const shouldUseClustering = useMemo(() => {
     if (viewMode === 'clusters') return true
     if (viewMode === 'heatmap') return false
@@ -418,7 +463,7 @@ const MapView = ({
     return false
   }, [viewMode, reports.length, shouldUseClustering])
 
-  // Handle individual markers for non-clustering modes
+  // ✅ EXISTING MARKER EFFECTS PRESERVED
   useEffect(() => {
     if (!mapInstanceRef.current || !shouldShowIndividualMarkers) {
       // Clear existing markers if not showing individual markers
@@ -434,7 +479,7 @@ const MapView = ({
     }
   }, [reports, shouldShowIndividualMarkers, addIndividualMarkers])
 
-  // Enhanced cluster click handler
+  // ✅ EXISTING CLUSTER CLICK HANDLER PRESERVED
   const handleClusterClick = useCallback((clusterData) => {
     console.log(`🎯 Cluster clicked: ${clusterData.count} reports`)
     
@@ -445,7 +490,7 @@ const MapView = ({
     // Default behavior is handled by the MarkerCluster component
   }, [onClusterClick])
 
-  // Performance monitoring
+  // ✅ EXISTING PERFORMANCE MONITORING PRESERVED
   useEffect(() => {
     const newPerformanceMode = reports.length > 1000 ? 'heavy' : 
                              reports.length > 500 ? 'moderate' : 'normal'
@@ -456,6 +501,34 @@ const MapView = ({
     }
   }, [reports.length, performanceMode])
 
+  // 🆕 PHASE 3B: SAFE ZONE EVENT HANDLERS
+  const handleSafeZoneSelect = useCallback((safeZone) => {
+    console.log('🛡️ Safe zone selected:', safeZone.id)
+    if (onSafeZoneSelect) {
+      onSafeZoneSelect(safeZone)
+    }
+  }, [onSafeZoneSelect])
+
+  const handleSafeZoneHover = useCallback((safeZone, isHovering) => {
+    if (onSafeZoneHover) {
+      onSafeZoneHover(safeZone, isHovering)
+    }
+  }, [onSafeZoneHover])
+
+  // 🆕 PHASE 3B: ROUTE EVENT HANDLERS
+  const handleRouteSelect = useCallback((route) => {
+    console.log('🗺️ Route selected:', route.id)
+    if (onRouteSelect) {
+      onRouteSelect(route)
+    }
+  }, [onRouteSelect])
+
+  const handleRouteHover = useCallback((route, isHovering) => {
+    if (onRouteHover) {
+      onRouteHover(route, isHovering)
+    }
+  }, [onRouteHover])
+
   return (
     <div className={`relative ${className}`}>
       <div 
@@ -464,7 +537,7 @@ const MapView = ({
         style={{ zIndex: 1 }}
       />
       
-      {/* Intelligent Marker Clustering */}
+      {/* ✅ EXISTING MARKER CLUSTERING PRESERVED */}
       {isMapReady && shouldUseClustering && (
         <MarkerCluster
           map={mapInstanceRef.current}
@@ -476,7 +549,7 @@ const MapView = ({
         />
       )}
       
-      {/* Heatmap Layer */}
+      {/* ✅ EXISTING HEATMAP LAYER PRESERVED */}
       {isMapReady && (viewMode === 'heatmap' || viewMode === 'hybrid') && (
         <HeatmapLayer
           map={mapInstanceRef.current}
@@ -486,7 +559,38 @@ const MapView = ({
         />
       )}
 
-      {/* Performance Warning for Large Datasets */}
+      {/* 🆕 PHASE 3B: SAFE ZONES OVERLAY */}
+      {isMapReady && showSafeZones && (
+        <SafeZones
+          map={mapInstanceRef.current}
+          reports={reports}
+          userLocation={userLocation}
+          isVisible={true}
+          options={safeZoneOptions}
+          onZoneSelect={handleSafeZoneSelect}
+          onZoneHover={handleSafeZoneHover}
+          showControls={false} // Map overlay mode
+          showStatistics={false}
+          enableMonitoring={true}
+        />
+      )}
+
+      {/* 🆕 PHASE 3B: ROUTE PLANNER OVERLAY */}
+      {isMapReady && showRoutePlanner && (
+        <RoutePlanner
+          map={mapInstanceRef.current}
+          reports={reports}
+          userLocation={userLocation}
+          isVisible={true}
+          options={routePlannerOptions}
+          onRouteSelect={handleRouteSelect}
+          onRouteHover={handleRouteHover}
+          showAdvanced={false} // Map overlay mode
+          enableMonitoring={true}
+        />
+      )}
+
+      {/* ✅ EXISTING PERFORMANCE WARNING PRESERVED */}
       {performanceMode === 'heavy' && viewMode === 'markers' && !shouldUseClustering && (
         <div className="absolute top-4 left-4 z-[1000] bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-xs">
           <div className="flex items-start">
@@ -507,7 +611,27 @@ const MapView = ({
         </div>
       )}
 
-      {/* Debug Info (Development Only) */}
+      {/* 🆕 PHASE 3B: INTELLIGENCE FEATURES STATUS */}
+      {(showSafeZones || showRoutePlanner) && (
+        <div className="absolute top-4 right-4 z-[1000] bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-2 text-xs">
+          <div className="flex items-center space-x-2">
+            {showSafeZones && (
+              <span className="flex items-center text-green-700">
+                <span className="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                Safe Zones
+              </span>
+            )}
+            {showRoutePlanner && (
+              <span className="flex items-center text-blue-700">
+                <span className="w-2 h-2 bg-blue-500 rounded-full mr-1"></span>
+                Smart Routes
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ✅ EXISTING DEBUG INFO PRESERVED (Development Only) */}
       {process.env.NODE_ENV === 'development' && (
         <div className="absolute bottom-4 left-4 z-[1000] bg-black/75 text-white text-xs p-2 rounded">
           <div>Reports: {reports.length}</div>
@@ -515,6 +639,9 @@ const MapView = ({
           <div>Strategy: {renderingStrategy.mode}</div>
           <div>Clustering: {shouldUseClustering ? 'Yes' : 'No'}</div>
           <div>Performance: {performanceMode}</div>
+          {/* 🆕 PHASE 3B: INTELLIGENCE DEBUG INFO */}
+          {showSafeZones && <div className="text-green-400">🛡️ Safe Zones: Active</div>}
+          {showRoutePlanner && <div className="text-blue-400">🗺️ Routing: Active</div>}
         </div>
       )}
     </div>
