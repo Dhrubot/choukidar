@@ -21,7 +21,11 @@
     "@turf/turf": "^7.2.0",
     "@turf/voronoi": "^7.2.0",
     "date-fns": "^4.1.0",
+    "framer-motion": "^12.23.5",
+    "html2canvas": "^1.4.1",
+    "idb": "^8.0.3",
     "install": "^0.13.0",
+    "jspdf": "^3.0.1",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "leaflet.markercluster": "^1.5.3",
@@ -30,10 +34,14 @@
     "query-string": "^9.2.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-hook-form": "^7.60.0",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.6.3",
+    "recharts": "^3.1.0",
+    "socket.io-client": "^4.8.1",
     "use-debounce": "^10.0.5",
-    "workbox-window": "^7.3.0"
+    "workbox-window": "^7.3.0",
+    "yup": "^1.6.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

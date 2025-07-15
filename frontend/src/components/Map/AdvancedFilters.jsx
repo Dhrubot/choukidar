@@ -1,4 +1,4 @@
-// === frontend/src/components/Map/AdvancedFilters.jsx ===
+// === frontend/src/components/Map/AdvancedFilters.jsx (FIXED + ENHANCED with Dynamic filterSections) ===
 import { useState, useCallback, useMemo } from 'react'
 import { 
   Filter, Search, X, ChevronDown, ChevronUp, Save, Upload, 
@@ -12,6 +12,7 @@ import MultiSelect from '../Common/MultiSelect'
 /**
  * Advanced Multi-Dimensional Filtering System for SafeStreets Bangladesh
  * Features: Real-time filtering, preset management, URL persistence, export functionality
+ * ✅ FIXED: Now uses dynamic filterSections rendering
  */
 const AdvancedFilters = ({
   filters,
@@ -38,7 +39,7 @@ const AdvancedFilters = ({
   const [presetName, setPresetName] = useState('')
   const [presetIcon, setPresetIcon] = useState('🔍')
 
-  // Incident type options with Bangladesh context
+  // Incident type options with Bangladesh context - PRESERVED
   const incidentTypeOptions = useMemo(() => [
     { 
       label: '💰 Chadabaji (Extortion)', 
@@ -62,14 +63,14 @@ const AdvancedFilters = ({
     }
   ], [])
 
-  // Status filter options (for admin users)
+  // Status filter options (for admin users) - PRESERVED
   const statusOptions = useMemo(() => [
     { label: '✅ Approved', value: 'approved', description: 'Public on map' },
     { label: '⏳ Pending Review', value: 'pending', description: 'Awaiting moderation' },
     { label: '❌ Rejected', value: 'rejected', description: 'Not approved for display' }
   ], [])
 
-  // Sort options
+  // Sort options - PRESERVED
   const sortOptions = useMemo(() => [
     { label: '🕐 Newest First', value: 'newest' },
     { label: '📅 Oldest First', value: 'oldest' },
@@ -77,47 +78,53 @@ const AdvancedFilters = ({
     { label: '📝 By Type', value: 'type' }
   ], [])
 
-  // Filter sections configuration
+  // ✅ ENHANCED: Filter sections configuration with dynamic counting - NOW USED!
   const filterSections = useMemo(() => [
     {
       id: 'search',
       label: 'Search & Text',
       icon: Search,
-      count: filters.searchTerm ? 1 : 0
+      count: filters.searchTerm ? 1 : 0,
+      description: 'Search through incident descriptions and locations'
     },
     {
       id: 'types',
       label: 'Incident Types',
       icon: AlertTriangle,
-      count: filters.incidentTypes?.length || 0
+      count: filters.incidentTypes?.length || 0,
+      description: 'Filter by crime categories'
     },
     {
       id: 'severity',
       label: 'Severity Range',
       icon: Shield,
-      count: (filters.severityRange?.[0] > 1 || filters.severityRange?.[1] < 5) ? 1 : 0
+      count: (filters.severityRange?.[0] > 1 || filters.severityRange?.[1] < 5) ? 1 : 0,
+      description: 'Filter by incident severity level'
     },
     {
       id: 'dates',
       label: 'Date & Time',
       icon: Clock,
-      count: filters.dateRange?.preset !== 'all' ? 1 : 0
+      count: filters.dateRange?.preset !== 'all' ? 1 : 0,
+      description: 'Filter by time periods and schedules'
     },
     {
       id: 'location',
       label: 'Location',
       icon: MapPin,
-      count: filters.locationFilter?.withinBangladesh !== null ? 1 : 0
+      count: filters.locationFilter?.withinBangladesh !== null ? 1 : 0,
+      description: 'Geographic and boundary filtering'
     },
     {
       id: 'advanced',
-      label: 'Advanced',
+      label: 'Advanced Options',
       icon: Settings,
-      count: (filters.showFlagged || filters.sortBy !== 'newest') ? 1 : 0
+      count: (filters.showFlagged || filters.sortBy !== 'newest' || filters.statusFilter?.length > 0) ? 1 : 0,
+      description: 'Sorting, flags, and admin options'
     }
   ], [filters])
 
-  // Calculate severity distribution for slider
+  // Calculate severity distribution for slider - PRESERVED
   const severityDistribution = useMemo(() => {
     return filteredReports.reduce((acc, report) => {
       acc[report.severity] = (acc[report.severity] || 0) + 1
@@ -125,21 +132,21 @@ const AdvancedFilters = ({
     }, {})
   }, [filteredReports])
 
-  // Convert incident types to MultiSelect format
+  // Convert incident types to MultiSelect format - PRESERVED
   const selectedIncidentTypes = useMemo(() => {
     return incidentTypeOptions.filter(option => 
       filters.incidentTypes?.includes(option.value)
     )
   }, [filters.incidentTypes, incidentTypeOptions])
 
-  // Convert status filter to MultiSelect format
+  // Convert status filter to MultiSelect format - PRESERVED
   const selectedStatusFilters = useMemo(() => {
     return statusOptions.filter(option => 
       filters.statusFilter?.includes(option.value)
     )
   }, [filters.statusFilter, statusOptions])
 
-  // Handle multi-select changes
+  // Handle multi-select changes - PRESERVED
   const handleIncidentTypesChange = useCallback((selected) => {
     updateFilter('incidentTypes', selected.map(item => item.value))
   }, [updateFilter])
@@ -148,17 +155,17 @@ const AdvancedFilters = ({
     updateFilter('statusFilter', selected.map(item => item.value))
   }, [updateFilter])
 
-  // Handle search with debouncing (handled in hook)
+  // ✅ FIXED: Handle search with proper parameter interface
   const handleSearchChange = useCallback((value) => {
     updateFilter('searchTerm', value)
   }, [updateFilter])
 
-  // Handle severity range change
+  // Handle severity range change - PRESERVED
   const handleSeverityChange = useCallback((range) => {
     updateFilter('severityRange', range)
   }, [updateFilter])
 
-  // Handle date range change
+  // Handle date range change - PRESERVED
   const handleDateRangeChange = useCallback((dateRange) => {
     updateFilter('dateRange', dateRange)
     
@@ -171,12 +178,12 @@ const AdvancedFilters = ({
     }
   }, [updateFilter])
 
-  // Handle sort change
+  // Handle sort change - PRESERVED
   const handleSortChange = useCallback((value) => {
     updateFilter('sortBy', value)
   }, [updateFilter])
 
-  // Save new preset
+  // Save new preset - PRESERVED
   const handleSavePreset = useCallback(() => {
     if (!presetName.trim()) return
     
@@ -188,7 +195,7 @@ const AdvancedFilters = ({
     console.log('✅ Filter preset saved:', newPreset.name)
   }, [presetName, presetIcon, saveFilterPreset])
 
-  // Export filtered data
+  // Export filtered data - PRESERVED
   const handleExport = useCallback((format = 'csv') => {
     try {
       if (format === 'csv') {
@@ -248,15 +255,221 @@ const AdvancedFilters = ({
     }
   }, [filteredReports, filters, filterStats])
 
-  // Toggle section expansion
+  // Toggle section expansion - PRESERVED
   const toggleSection = useCallback((sectionId) => {
     setActiveSection(activeSection === sectionId ? null : sectionId)
   }, [activeSection])
 
+  // ✅ ENHANCED: Render individual filter section content
+  const renderSectionContent = useCallback((section) => {
+    switch (section.id) {
+      case 'search':
+        return (
+          <div className="p-4 border-t border-neutral-200">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-neutral-400" />
+              <input
+                type="text"
+                placeholder="Search descriptions, locations, or incident types..."
+                value={filters.searchTerm || ''}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full pl-10 pr-10 py-3 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-bangladesh-green focus:border-transparent"
+              />
+              {filters.searchTerm && (
+                <button
+                  onClick={() => handleSearchChange('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )
+
+      case 'types':
+        return (
+          <div className="p-4 border-t border-neutral-200">
+            <MultiSelect
+              options={incidentTypeOptions}
+              value={selectedIncidentTypes}
+              onChange={handleIncidentTypesChange}
+              placeholder="Select incident types..."
+              hasSelectAll={true}
+              selectAllLabel="All Types"
+              allItemsAreSelected="All incident types"
+            />
+          </div>
+        )
+
+      case 'severity':
+        return (
+          <div className="p-4 border-t border-neutral-200">
+            <SeveritySlider
+              severityRange={filters.severityRange || [1, 5]}
+              onSeverityChange={handleSeverityChange}
+              reportCounts={severityDistribution}
+              showStats={true}
+              showLabels={true}
+            />
+          </div>
+        )
+
+      case 'dates':
+        return (
+          <div className="p-4 border-t border-neutral-200">
+            <DateRangePicker
+              dateRange={filters.dateRange || { startDate: null, endDate: null, preset: 'all' }}
+              onDateRangeChange={handleDateRangeChange}
+              datePresets={datePresets}
+              showTimeFilter={true}
+              showDayFilter={true}
+            />
+          </div>
+        )
+
+      case 'location':
+        return (
+          <div className="p-4 border-t border-neutral-200">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">Geographic Scope</label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="bangladeshScope"
+                      value="all"
+                      checked={filters.locationFilter?.withinBangladesh === null}
+                      onChange={() => updateNestedFilter('locationFilter.withinBangladesh', null)}
+                      className="mr-2 w-4 h-4 text-bangladesh-green border-neutral-300 focus:ring-bangladesh-green"
+                    />
+                    <span className="text-sm">All locations</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="bangladeshScope"
+                      value="within"
+                      checked={filters.locationFilter?.withinBangladesh === true}
+                      onChange={() => updateNestedFilter('locationFilter.withinBangladesh', true)}
+                      className="mr-2 w-4 h-4 text-bangladesh-green border-neutral-300 focus:ring-bangladesh-green"
+                    />
+                    <span className="text-sm">Within Bangladesh only</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="bangladeshScope"
+                      value="outside"
+                      checked={filters.locationFilter?.withinBangladesh === false}
+                      onChange={() => updateNestedFilter('locationFilter.withinBangladesh', false)}
+                      className="mr-2 w-4 h-4 text-bangladesh-green border-neutral-300 focus:ring-bangladesh-green"
+                    />
+                    <span className="text-sm">Outside Bangladesh</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+
+      case 'advanced':
+        return (
+          <div className="p-4 border-t border-neutral-200 space-y-4">
+            
+            {/* Sort Options */}
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">Sort Order</label>
+              <select
+                value={filters.sortBy || 'newest'}
+                onChange={(e) => handleSortChange(e.target.value)}
+                className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-bangladesh-green focus:border-transparent"
+              >
+                {sortOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status Filter (for admin users) */}
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">Report Status</label>
+              <MultiSelect
+                options={statusOptions}
+                value={selectedStatusFilters}
+                onChange={handleStatusFilterChange}
+                placeholder="Filter by status..."
+                hasSelectAll={true}
+                selectAllLabel="All Statuses"
+              />
+            </div>
+
+            {/* Security Flags */}
+            <div className="flex items-center space-x-3">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filters.showFlagged || false}
+                  onChange={(e) => updateFilter('showFlagged', e.target.checked)}
+                  className="mr-2 w-4 h-4 text-bangladesh-green border-neutral-300 rounded focus:ring-bangladesh-green"
+                />
+                <span className="text-sm text-neutral-700">Show flagged reports only</span>
+              </label>
+            </div>
+
+            {/* Export Options */}
+            <div className="pt-4 border-t border-neutral-200">
+              <label className="block text-sm font-medium text-neutral-700 mb-2">Export Filtered Data</label>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => handleExport('csv')}
+                  className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                >
+                  <Download className="w-4 h-4 mr-1 inline" />
+                  CSV
+                </button>
+                <button
+                  onClick={() => handleExport('json')}
+                  className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  <Download className="w-4 h-4 mr-1 inline" />
+                  JSON
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }, [
+    filters,
+    handleSearchChange,
+    incidentTypeOptions,
+    selectedIncidentTypes,
+    handleIncidentTypesChange,
+    severityDistribution,
+    handleSeverityChange,
+    datePresets,
+    handleDateRangeChange,
+    updateNestedFilter,
+    updateFilter,
+    sortOptions,
+    handleSortChange,
+    statusOptions,
+    selectedStatusFilters,
+    handleStatusFilterChange,
+    handleExport
+  ])
+
   return (
     <div className={`advanced-filters bg-white rounded-lg shadow-md border border-neutral-200 ${className}`}>
       
-      {/* Header with Stats */}
+      {/* Header with Stats - PRESERVED */}
       <div className="p-4 border-b border-neutral-200">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-3">
@@ -290,7 +503,7 @@ const AdvancedFilters = ({
           </div>
         </div>
 
-        {/* Filter Stats */}
+        {/* Filter Stats - PRESERVED */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="text-center">
             <div className="text-lg font-bold text-bangladesh-green">{filterStats.filtered}</div>
@@ -310,7 +523,7 @@ const AdvancedFilters = ({
           </div>
         </div>
 
-        {/* Performance Indicator */}
+        {/* Performance Indicator - PRESERVED */}
         {isFiltering && (
           <div className="mt-3 flex items-center justify-center p-2 bg-blue-50 rounded-lg">
             <div className="animate-spin w-4 h-4 border-2 border-bangladesh-green border-t-transparent rounded-full mr-2"></div>
@@ -319,11 +532,11 @@ const AdvancedFilters = ({
         )}
       </div>
 
-      {/* Filter Content */}
+      {/* Filter Content - ENHANCED */}
       {isExpanded && (
         <div className="p-4">
           
-          {/* Filter Presets */}
+          {/* Filter Presets - PRESERVED */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-medium text-neutral-800 flex items-center">
@@ -356,247 +569,42 @@ const AdvancedFilters = ({
             </div>
           </div>
 
-          {/* Filter Sections */}
+          {/* ✅ ENHANCED: Dynamic Filter Sections - NOW USING filterSections ARRAY! */}
           <div className="space-y-4">
-            
-            {/* Search Section */}
-            <div className="border border-neutral-200 rounded-lg">
-              <button
-                onClick={() => toggleSection('search')}
-                className="w-full p-3 flex items-center justify-between hover:bg-neutral-50 transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <Search className="w-4 h-4 text-bangladesh-green" />
-                  <span className="font-medium">Search & Text</span>
-                  {filters.searchTerm && (
-                    <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                      Active
+            {filterSections.map((section) => {
+              const Icon = section.icon
+              return (
+                <div key={section.id} className="border border-neutral-200 rounded-lg">
+                  <button
+                    onClick={() => toggleSection(section.id)}
+                    className="w-full p-3 flex items-center justify-between hover:bg-neutral-50 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Icon className="w-4 h-4 text-bangladesh-green" />
+                      <div className="text-left">
+                        <span className="font-medium">{section.label}</span>
+                        <div className="text-xs text-neutral-500">{section.description}</div>
+                      </div>
+                      {section.count > 0 && (
+                        <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-medium">
+                          {section.count === 1 ? 'Active' : `${section.count} active`}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <ChevronDown className={`w-4 h-4 transition-transform ${
-                  activeSection === 'search' ? 'rotate-180' : ''
-                }`} />
-              </button>
-              
-              {activeSection === 'search' && (
-                <div className="p-4 border-t border-neutral-200">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                    <input
-                      type="text"
-                      placeholder="Search descriptions, locations, or incident types..."
-                      value={filters.searchTerm || ''}
-                      onChange={(e) => handleSearchChange(e.target.value)}
-                      className="w-full pl-10 pr-10 py-3 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-bangladesh-green focus:border-transparent"
-                    />
-                    {filters.searchTerm && (
-                      <button
-                        onClick={() => handleSearchChange('')}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Incident Types Section */}
-            <div className="border border-neutral-200 rounded-lg">
-              <button
-                onClick={() => toggleSection('types')}
-                className="w-full p-3 flex items-center justify-between hover:bg-neutral-50 transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <AlertTriangle className="w-4 h-4 text-bangladesh-green" />
-                  <span className="font-medium">Incident Types</span>
-                  {filters.incidentTypes?.length > 0 && (
-                    <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                      {filters.incidentTypes.length} selected
-                    </div>
-                  )}
-                </div>
-                <ChevronDown className={`w-4 h-4 transition-transform ${
-                  activeSection === 'types' ? 'rotate-180' : ''
-                }`} />
-              </button>
-              
-              {activeSection === 'types' && (
-                <div className="p-4 border-t border-neutral-200">
-                  <MultiSelect
-                    options={incidentTypeOptions}
-                    value={selectedIncidentTypes}
-                    onChange={handleIncidentTypesChange}
-                    placeholder="Select incident types..."
-                    hasSelectAll={true}
-                    selectAllLabel="All Types"
-                    allItemsAreSelected="All incident types"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Severity Range Section */}
-            <div className="border border-neutral-200 rounded-lg">
-              <button
-                onClick={() => toggleSection('severity')}
-                className="w-full p-3 flex items-center justify-between hover:bg-neutral-50 transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <Shield className="w-4 h-4 text-bangladesh-green" />
-                  <span className="font-medium">Severity Range</span>
-                  {(filters.severityRange?.[0] > 1 || filters.severityRange?.[1] < 5) && (
-                    <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                      {filters.severityRange[0]}-{filters.severityRange[1]}
-                    </div>
-                  )}
-                </div>
-                <ChevronDown className={`w-4 h-4 transition-transform ${
-                  activeSection === 'severity' ? 'rotate-180' : ''
-                }`} />
-              </button>
-              
-              {activeSection === 'severity' && (
-                <div className="p-4 border-t border-neutral-200">
-                  <SeveritySlider
-                    severityRange={filters.severityRange || [1, 5]}
-                    onSeverityChange={handleSeverityChange}
-                    reportCounts={severityDistribution}
-                    showStats={true}
-                    showLabels={true}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Date & Time Section */}
-            <div className="border border-neutral-200 rounded-lg">
-              <button
-                onClick={() => toggleSection('dates')}
-                className="w-full p-3 flex items-center justify-between hover:bg-neutral-50 transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <Clock className="w-4 h-4 text-bangladesh-green" />
-                  <span className="font-medium">Date & Time</span>
-                  {filters.dateRange?.preset !== 'all' && (
-                    <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                      {filters.dateRange.preset}
-                    </div>
-                  )}
-                </div>
-                <ChevronDown className={`w-4 h-4 transition-transform ${
-                  activeSection === 'dates' ? 'rotate-180' : ''
-                }`} />
-              </button>
-              
-              {activeSection === 'dates' && (
-                <div className="p-4 border-t border-neutral-200">
-                  <DateRangePicker
-                    dateRange={filters.dateRange || { startDate: null, endDate: null, preset: 'all' }}
-                    onDateRangeChange={handleDateRangeChange}
-                    datePresets={datePresets}
-                    showTimeFilter={true}
-                    showDayFilter={true}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Advanced Options Section */}
-            <div className="border border-neutral-200 rounded-lg">
-              <button
-                onClick={() => toggleSection('advanced')}
-                className="w-full p-3 flex items-center justify-between hover:bg-neutral-50 transition-colors"
-              >
-                <div className="flex items-center space-x-3">
-                  <Settings className="w-4 h-4 text-bangladesh-green" />
-                  <span className="font-medium">Advanced Options</span>
-                  {(filters.showFlagged || filters.sortBy !== 'newest' || filters.statusFilter?.length > 0) && (
-                    <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                      Active
-                    </div>
-                  )}
-                </div>
-                <ChevronDown className={`w-4 h-4 transition-transform ${
-                  activeSection === 'advanced' ? 'rotate-180' : ''
-                }`} />
-              </button>
-              
-              {activeSection === 'advanced' && (
-                <div className="p-4 border-t border-neutral-200 space-y-4">
+                    <ChevronDown className={`w-4 h-4 transition-transform ${
+                      activeSection === section.id ? 'rotate-180' : ''
+                    }`} />
+                  </button>
                   
-                  {/* Sort Options */}
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-2">Sort Order</label>
-                    <select
-                      value={filters.sortBy || 'newest'}
-                      onChange={(e) => handleSortChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-bangladesh-green focus:border-transparent"
-                    >
-                      {sortOptions.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Status Filter (for admin users) */}
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-2">Report Status</label>
-                    <MultiSelect
-                      options={statusOptions}
-                      value={selectedStatusFilters}
-                      onChange={handleStatusFilterChange}
-                      placeholder="Filter by status..."
-                      hasSelectAll={true}
-                      selectAllLabel="All Statuses"
-                    />
-                  </div>
-
-                  {/* Security Flags */}
-                  <div className="flex items-center space-x-3">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filters.showFlagged || false}
-                        onChange={(e) => updateFilter('showFlagged', e.target.checked)}
-                        className="mr-2 w-4 h-4 text-bangladesh-green border-neutral-300 rounded focus:ring-bangladesh-green"
-                      />
-                      <span className="text-sm text-neutral-700">Show flagged reports only</span>
-                    </label>
-                  </div>
-
-                  {/* Export Options */}
-                  <div className="pt-4 border-t border-neutral-200">
-                    <label className="block text-sm font-medium text-neutral-700 mb-2">Export Filtered Data</label>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleExport('csv')}
-                        className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                      >
-                        <Download className="w-4 h-4 mr-1 inline" />
-                        CSV
-                      </button>
-                      <button
-                        onClick={() => handleExport('json')}
-                        className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                      >
-                        <Download className="w-4 h-4 mr-1 inline" />
-                        JSON
-                      </button>
-                    </div>
-                  </div>
+                  {activeSection === section.id && renderSectionContent(section)}
                 </div>
-              )}
-            </div>
+              )
+            })}
           </div>
         </div>
       )}
 
-      {/* Save Preset Modal */}
+      {/* Save Preset Modal - PRESERVED */}
       {showPresetModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">

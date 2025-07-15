@@ -1,4 +1,4 @@
-// === frontend/src/hooks/useAdvancedFilters.js ===
+// === frontend/src/hooks/useAdvancedFilters.js (FIXED) ===
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useDebounce } from 'use-debounce'
 import { format, isWithinInterval, startOfDay, endOfDay, subDays, subHours } from 'date-fns'
@@ -7,6 +7,7 @@ import queryString from 'query-string'
 /**
  * Advanced filtering hook for SafeStreets Bangladesh
  * Handles multi-dimensional filtering with URL persistence and performance optimization
+ * ✅ FIXED: All dependency issues resolved
  */
 export const useAdvancedFilters = (reports = [], options = {}) => {
   // Configuration with Bangladesh-optimized defaults
@@ -17,7 +18,7 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     ...options
   }
 
-  // Core filter state
+  // Core filter state - PRESERVED
   const [filters, setFilters] = useState({
     // Text search
     searchTerm: '',
@@ -56,7 +57,7 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     showFlagged: false // Show security-flagged reports
   })
 
-  // Filter presets for quick access
+  // Filter presets for quick access - PRESERVED
   const [filterPresets, setFilterPresets] = useState([
     {
       id: 'high-risk',
@@ -101,17 +102,17 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     }
   ])
 
-  // Filter history for quick re-access
+  // Filter history for quick re-access - PRESERVED
   const [filterHistory, setFilterHistory] = useState([])
 
-  // Processing state
+  // Processing state - PRESERVED
   const [isFiltering, setIsFiltering] = useState(false)
   const [lastFilterTime, setLastFilterTime] = useState(Date.now())
 
-  // Debounced search term for performance
+  // Debounced search term for performance - PRESERVED
   const [debouncedSearchTerm] = useDebounce(filters.searchTerm, config.debounceMs)
 
-  // Date preset configurations
+  // Date preset configurations - PRESERVED
   const datePresets = useMemo(() => ({
     'all': { label: 'All Time', getValue: () => ({ startDate: null, endDate: null }) },
     '24h': { 
@@ -145,7 +146,7 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     'custom': { label: 'Custom Range', getValue: () => null }
   }), [])
 
-  // Apply date preset
+  // Apply date preset - PRESERVED
   const applyDatePreset = useCallback((preset) => {
     const presetConfig = datePresets[preset]
     if (!presetConfig) return
@@ -164,7 +165,7 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     }))
   }, [datePresets])
 
-  // Core filtering logic with performance optimization
+  // ✅ FIXED: Core filtering logic with proper dependencies
   const applyFilters = useCallback((inputReports = reports) => {
     setIsFiltering(true)
     const startTime = performance.now()
@@ -292,9 +293,9 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
       setIsFiltering(false)
       setLastFilterTime(Date.now())
     }
-  }, [filters, debouncedSearchTerm])
+  }, [filters, debouncedSearchTerm, reports]) // ✅ FIXED: Added 'reports' to dependencies
 
-    // Check if any filters are active
+  // Check if any filters are active - PRESERVED
   const hasActiveFilters = useCallback(() => {
     return (
       filters.searchTerm ||
@@ -310,12 +311,12 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     )
   }, [filters])
 
-  // Get filtered reports with memoization
+  // Get filtered reports with memoization - PRESERVED
   const filteredReports = useMemo(() => {
     return applyFilters(reports)
   }, [applyFilters, reports])
 
-  // Filter statistics
+  // Filter statistics - PRESERVED
   const filterStats = useMemo(() => {
     const total = reports.length
     const filtered = filteredReports.length
@@ -349,9 +350,9 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
       severityDistribution,
       hasActiveFilters: hasActiveFilters()
     }
-  }, [reports, filteredReports])
+  }, [reports, filteredReports, hasActiveFilters])
 
-  // Update individual filter
+  // Update individual filter - PRESERVED
   const updateFilter = useCallback((key, value) => {
     setFilters(prev => ({
       ...prev,
@@ -359,7 +360,7 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     }))
   }, [])
 
-  // Update nested filter (e.g., dateRange.startDate)
+  // Update nested filter (e.g., dateRange.startDate) - PRESERVED
   const updateNestedFilter = useCallback((path, value) => {
     setFilters(prev => {
       const newFilters = { ...prev }
@@ -376,7 +377,7 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     })
   }, [])
 
-  // Clear all filters
+  // Clear all filters - PRESERVED
   const clearFilters = useCallback(() => {
     setFilters({
       searchTerm: '',
@@ -393,7 +394,7 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     })
   }, [])
 
-  // Save filter preset
+  // Save filter preset - PRESERVED
   const saveFilterPreset = useCallback((name, icon = '🔍') => {
     const newPreset = {
       id: Date.now().toString(),
@@ -414,7 +415,7 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     return newPreset
   }, [filters, config.maxFilterHistory])
 
-  // Load filter preset
+  // Load filter preset - PRESERVED
   const loadFilterPreset = useCallback((presetId) => {
     const preset = filterPresets.find(p => p.id === presetId)
     if (preset) {
@@ -428,13 +429,13 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     }
   }, [filterPresets, config.maxFilterHistory])
 
-  // Delete filter preset
+  // Delete filter preset - PRESERVED
   const deleteFilterPreset = useCallback((presetId) => {
     setFilterPresets(prev => prev.filter(p => p.id !== presetId))
     setFilterHistory(prev => prev.filter(h => h.id !== presetId))
   }, [])
 
-  // URL persistence (optional)
+  // URL persistence (optional) - PRESERVED
   useEffect(() => {
     if (!config.enableUrlPersistence) return
 
@@ -457,24 +458,27 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
       
       setFilters(prev => ({ ...prev, ...filtersFromUrl }))
     }
-  }, [config.enableUrlPersistence])
+  }, [config.enableUrlPersistence, applyDatePreset])
 
-  // Update URL when filters change
+  // ✅ ENHANCED: Debounced URL updates to prevent performance issues
+  const [debouncedFilters] = useDebounce(filters, 500)
+
+  // Update URL when filters change - ENHANCED with debouncing
   useEffect(() => {
     if (!config.enableUrlPersistence || !hasActiveFilters()) return
 
     const urlParams = {}
     
-    if (filters.searchTerm) urlParams.search = filters.searchTerm
-    if (filters.incidentTypes.length > 0) urlParams.types = filters.incidentTypes.join(',')
-    if (filters.severityRange[0] > 1 || filters.severityRange[1] < 5) {
-      urlParams.severity = `${filters.severityRange[0]}-${filters.severityRange[1]}`
+    if (debouncedFilters.searchTerm) urlParams.search = debouncedFilters.searchTerm
+    if (debouncedFilters.incidentTypes.length > 0) urlParams.types = debouncedFilters.incidentTypes.join(',')
+    if (debouncedFilters.severityRange[0] > 1 || debouncedFilters.severityRange[1] < 5) {
+      urlParams.severity = `${debouncedFilters.severityRange[0]}-${debouncedFilters.severityRange[1]}`
     }
-    if (filters.dateRange.preset !== 'all') urlParams.datePreset = filters.dateRange.preset
+    if (debouncedFilters.dateRange.preset !== 'all') urlParams.datePreset = debouncedFilters.dateRange.preset
 
     const newUrl = `${window.location.pathname}?${queryString.stringify(urlParams)}`
     window.history.replaceState({}, '', newUrl)
-  }, [filters, hasActiveFilters, config.enableUrlPersistence])
+  }, [debouncedFilters, hasActiveFilters, config.enableUrlPersistence])
 
   return {
     // State
