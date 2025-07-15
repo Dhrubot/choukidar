@@ -1,6 +1,6 @@
 // === frontend/src/hooks/useAdvancedFilters.js ===
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useDebounce } from 'react-use-debounce'
+import { useDebounce } from 'use-debounce'
 import { format, isWithinInterval, startOfDay, endOfDay, subDays, subHours } from 'date-fns'
 import queryString from 'query-string'
 
@@ -294,6 +294,22 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     }
   }, [filters, debouncedSearchTerm])
 
+    // Check if any filters are active
+  const hasActiveFilters = useCallback(() => {
+    return (
+      filters.searchTerm ||
+      filters.incidentTypes.length > 0 ||
+      filters.severityRange[0] > 1 || filters.severityRange[1] < 5 ||
+      filters.dateRange.preset !== 'all' ||
+      filters.timeOfDay.length > 0 ||
+      filters.daysOfWeek.length > 0 ||
+      filters.statusFilter.length > 0 ||
+      filters.locationFilter.withinBangladesh !== null ||
+      filters.showFlagged ||
+      filters.sortBy !== 'newest'
+    )
+  }, [filters])
+
   // Get filtered reports with memoization
   const filteredReports = useMemo(() => {
     return applyFilters(reports)
@@ -334,22 +350,6 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
       hasActiveFilters: hasActiveFilters()
     }
   }, [reports, filteredReports])
-
-  // Check if any filters are active
-  const hasActiveFilters = useCallback(() => {
-    return (
-      filters.searchTerm ||
-      filters.incidentTypes.length > 0 ||
-      filters.severityRange[0] > 1 || filters.severityRange[1] < 5 ||
-      filters.dateRange.preset !== 'all' ||
-      filters.timeOfDay.length > 0 ||
-      filters.daysOfWeek.length > 0 ||
-      filters.statusFilter.length > 0 ||
-      filters.locationFilter.withinBangladesh !== null ||
-      filters.showFlagged ||
-      filters.sortBy !== 'newest'
-    )
-  }, [filters])
 
   // Update individual filter
   const updateFilter = useCallback((key, value) => {

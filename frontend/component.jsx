@@ -65,14 +65,6 @@ const MapPage = memo(() => {
   const [showFilterPresets, setShowFilterPresets] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
-  // cluseter states
-  const [clusterStats, setClusterStats] = useState({
-    totalClusters: 0,
-    averageClusterSize: 0,
-    largestCluster: 0,
-    lastClickedCluster: null
-  })
-
   // Detect mobile device
   useEffect(() => {
     const checkMobile = () => {
@@ -138,34 +130,12 @@ const MapPage = memo(() => {
 
   // Enhanced cluster click handler
   const handleClusterClick = useCallback((clusterData) => {
-    const { cluster, markers, count, bounds } = clusterData
-
-    console.log(`🎯 Cluster clicked: ${count} reports in area`)
-
-    // Update cluster stats
-    setClusterStats(prev => ({
-      ...prev,
-      totalClusters: prev.totalClusters, // This would be updated by MarkerCluster component
-      lastClickedCluster: {
-        count,
-        bounds,
-        timestamp: Date.now(),
-        location: bounds ? bounds.getCenter() : null
-      }
-    }))
-
-    // Optional: Show cluster details in sidebar or modal
-    // You could trigger a detailed view of the cluster here
+    console.log(`🎯 Cluster clicked: ${clusterData.count} reports`)
   }, [])
 
   // Enhanced marker click handler
   const handleMarkerClick = useCallback((markerData) => {
-    const { report, position } = markerData
-    
-    console.log(`📍 Marker clicked: ${report.type} incident at ${position.lat}, ${position.lng}`)
-    
-    // Optional: Show detailed report view
-    // This could open a modal or sidebar with full report details
+    console.log(`📍 Marker clicked: ${markerData.report.type} incident`)
   }, [])
 
   // Quick filter handlers
@@ -309,8 +279,8 @@ const MapPage = memo(() => {
                           key={type}
                           onClick={() => handleQuickTypeFilter(type)}
                           className={`p-2 text-sm rounded-lg border transition-all duration-200 ${filters.incidentTypes?.includes(type)
-                            ? 'border-bangladesh-green bg-bangladesh-green text-white'
-                            : 'border-neutral-300 hover:border-neutral-400 hover:bg-neutral-50'
+                              ? 'border-bangladesh-green bg-bangladesh-green text-white'
+                              : 'border-neutral-300 hover:border-neutral-400 hover:bg-neutral-50'
                             }`}
                         >
                           <span className="mr-1">{icon}</span>
@@ -324,8 +294,8 @@ const MapPage = memo(() => {
                       <button
                         onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                         className={`flex-1 py-2 px-4 rounded-lg border transition-all font-medium text-sm ${showAdvancedFilters || hasActiveFilters()
-                          ? 'border-bangladesh-green bg-bangladesh-green text-white'
-                          : 'border-neutral-300 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50'
+                            ? 'border-bangladesh-green bg-bangladesh-green text-white'
+                            : 'border-neutral-300 text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50'
                           }`}
                       >
                         <Filter className="w-4 h-4 mr-2 inline" />
@@ -504,8 +474,8 @@ const MapPage = memo(() => {
                                 key={mode}
                                 onClick={() => handleViewModeChange(mode)}
                                 className={`p-3 rounded-lg transition-all duration-200 ${viewMode === mode
-                                  ? `${config.bgColor} text-white shadow-md`
-                                  : 'text-neutral-600 hover:bg-neutral-100'
+                                    ? `${config.bgColor} text-white shadow-md`
+                                    : 'text-neutral-600 hover:bg-neutral-100'
                                   }`}
                                 title={`${mode.charAt(0).toUpperCase() + mode.slice(1)} View`}
                               >
@@ -560,9 +530,6 @@ const MapPage = memo(() => {
                   {viewMode === 'clusters' && performanceStats.estimatedClusters > 0 && (
                     <div className="text-xs text-purple-600 mt-1">
                       ≈ {performanceStats.estimatedClusters} intelligent clusters
-                      {clusterStats.totalClusters > 0 && (
-                        <span className="ml-1">• {clusterStats.totalClusters} active</span>
-                      )}
                     </div>
                   )}
                 </div>
@@ -748,18 +715,6 @@ const MapPage = memo(() => {
                     )}
                   </div>
 
-                  {clusterStats.lastClickedCluster && (
-                    <div className="text-center p-4 bg-purple-50 rounded-lg">
-                      <div className="text-lg font-bold text-purple-600">
-                        {clusterStats.lastClickedCluster.count}
-                      </div>
-                      <div className="text-sm text-purple-700">Last Clicked Cluster</div>
-                      <div className="text-xs text-purple-600 mt-1">
-                        {new Date(clusterStats.lastClickedCluster.timestamp).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  )}
-
                   {performanceStats.performanceImpact !== 'low' && (
                     <div className="text-center p-4 bg-amber-50 rounded-lg">
                       <div className="text-lg font-bold text-amber-600 flex items-center justify-center">
@@ -818,4 +773,3 @@ const MapPage = memo(() => {
 MapPage.displayName = 'MapPage'
 
 export default MapPage
-
