@@ -23,7 +23,14 @@ import { useReports } from '../../hooks/useReports'
 import { useAdvancedFilters } from '../../hooks/useAdvancedFilters'
 import { useMapState } from '../../hooks/useMapState'
 
-// Enhanced view mode configurations with clustering
+// ✅ PHASE 4: Custom Hooks
+import { useMapPageUI } from '../../hooks/useMapPageUI'
+import { useMapPerformance } from '../../hooks/useMapPerformance'
+import { useQuickFilters } from '../../hooks/useQuickFilters'
+import { useMapInteractions } from '../../hooks/useMapInteractions'
+import { useMapViewMode } from '../../hooks/useMapViewMode'
+
+// Enhanced view mode configurations
 const VIEW_MODE_CONFIG = {
   markers: { color: 'text-bangladesh-green', bgColor: 'bg-bangladesh-green', icon: Map },
   clusters: { color: 'text-purple-600', bgColor: 'bg-purple-600', icon: Target },
@@ -32,27 +39,20 @@ const VIEW_MODE_CONFIG = {
 }
 
 const MapPage = memo(() => {
+  // ✅ CORE DATA & STATE
   const { reports, loading, error, refetch } = useReports()
 
-  // ✅ VERIFIED: Using useMapState instead of manual state management
   const {
     mapState,
     mapReady,
     userLocation,
     selectedMarker,
     isUserInBangladesh,
-    distanceFromCenter,
-    hasHeatmap,
-    hasClustering,
-    hasMarkers,
     updateMapState,
-    resetMapState,
     setMapReady,
     setUserLocation,
     setSelectedMarker,
     centerOnUser,
-    centerOnCoordinates,
-    isLocationValid,
     hasUserLocation
   } = useMapState({
     defaultCenter: [23.8103, 90.4125], // Dhaka coordinates
@@ -62,7 +62,6 @@ const MapPage = memo(() => {
     trackUserLocation: true
   })
 
-  // ✅ VERIFIED: Advanced filtering system
   const {
     filters,
     filteredReports,
@@ -84,145 +83,47 @@ const MapPage = memo(() => {
     debounceMs: 300
   })
 
-  // ✅ VERIFIED: UI state
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  const [showFilterPresets, setShowFilterPresets] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
+  // ✅ PHASE 4: CUSTOM HOOKS INTEGRATION
+  const {
+    showAdvancedFilters,
+    showFilterPresets,
+    isMobile,
+    setShowAdvancedFilters,
+    setShowFilterPresets
+  } = useMapPageUI()
 
-  // ✅ VERIFIED: Enhanced cluster stats
-  const [clusterStats, setClusterStats] = useState({
-    totalClusters: 0,
-    averageClusterSize: 0,
-    largestCluster: 0,
-    lastClickedCluster: null
-  })
+  const {
+    performanceStats,
+    recommendations
+  } = useMapPerformance(filteredReports, reports, mapState.viewMode)
 
-  // ✅ VERIFIED: Detect mobile device
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024)
-    }
+  const {
+    handleQuickSearch,
+    handleQuickTypeFilter
+  } = useQuickFilters(updateFilter, filters)
 
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+  const {
+    clusterStats,
+    handleClusterClick,
+    handleMarkerClick
+  } = useMapInteractions(setSelectedMarker)
 
-  // ✅ VERIFIED: Enhanced performance stats with clustering intelligence
-  const performanceStats = useMemo(() => {
-    const count = filteredReports.length
+  const {
+    handleViewModeChange,
+    handleHeatmapOptionsChange,
+    handleClusteringOptionsChange,
+    shouldUseClustering,
+    viewModeUtils
+  } = useMapViewMode(mapState, updateMapState, filteredReports.length, performanceStats)
 
-    return {
-      datasetSize: count > 1000 ? 'large' : count > 500 ? 'medium' : 'small',
-      isLargeDataset: count > 200,
-      shouldRecommendClustering: count > 100 && mapState.viewMode === 'markers',
-      shouldWarnHybrid: count > 500 && mapState.viewMode === 'hybrid',
-      recommendedViewMode: count > 1000 ? 'clusters' :
-        count > 500 ? 'clusters' :
-          count > 100 ? 'hybrid' : 'markers',
-      estimatedClusters: Math.ceil(count / 15),
-      performanceImpact: count > 1000 ? 'high' : count > 500 ? 'medium' : 'low',
-      filterEfficiency: reports.length > 0 ? ((count / reports.length) * 100).toFixed(1) : 100
-    }
-  }, [filteredReports.length, mapState.viewMode, reports.length])
-
-  // ✅ VERIFIED: Smart view mode recommendation system
-  useEffect(() => {
-    const { datasetSize, recommendedViewMode } = performanceStats
-
-    if (datasetSize === 'large' && mapState.viewMode === 'markers') {
-      console.log(`💡 Large dataset detected (${filteredReports.length} reports) - clustering recommended`)
-    }
-  }, [performanceStats, mapState.viewMode, filteredReports.length])
-
-  // ✅ VERIFIED: View mode change handler
-  const handleViewModeChange = useCallback((newMode) => {
-    updateMapState({ viewMode: newMode })
-    console.log(`📊 Map view changed to: ${newMode} for ${filteredReports.length} reports`)
-  }, [updateMapState, filteredReports.length])
-
-  // ✅ VERIFIED: Heatmap options handler
-  const handleHeatmapOptionsChange = useCallback((newOptions) => {
-    updateMapState({ 
-      heatmapOptions: {
-        ...mapState.heatmapOptions,
-        ...newOptions
-      }
-    })
-  }, [updateMapState, mapState.heatmapOptions])
-
-  // ✅ VERIFIED: Clustering options handler
-  const handleClusteringOptionsChange = useCallback((newOptions) => {
-    updateMapState({
-      clusteringOptions: {
-        ...mapState.clusteringOptions,
-        ...newOptions
-      }
-    })
-  }, [updateMapState, mapState.clusteringOptions])
-
-  // ✅ VERIFIED: Map ready handler
-  const handleMapReady = useCallback((map) => {
+  // ✅ SIMPLIFIED: Map ready handler
+  const handleMapReady = (map) => {
     setMapReady(true)
     console.log('🗺️ Map instance ready for enhanced filtering features')
-  }, [setMapReady])
+  }
 
-  // ✅ VERIFIED: Enhanced cluster click handler
-  const handleClusterClick = useCallback((clusterData) => {
-    const { cluster, markers, count, bounds } = clusterData
-
-    console.log(`🎯 Cluster clicked: ${count} reports in area`)
-
-    setClusterStats(prev => ({
-      ...prev,
-      totalClusters: prev.totalClusters,
-      lastClickedCluster: {
-        count,
-        bounds,
-        timestamp: Date.now(),
-        location: bounds ? bounds.getCenter() : null
-      }
-    }))
-  }, [])
-
-  // ✅ VERIFIED: Enhanced marker click handler
-  const handleMarkerClick = useCallback((markerData) => {
-    const { report, position, marker } = markerData
-    
-    console.log(`📍 Marker clicked: ${report.type} incident at ${position.lat}, ${position.lng}`)
-    
-    setSelectedMarker({
-      report,
-      position,
-      marker,
-      timestamp: Date.now()
-    })
-  }, [setSelectedMarker])
-
-  // ✅ VERIFIED: Quick filter handlers
-  const handleQuickSearch = useCallback((searchTerm) => {
-    updateFilter('searchTerm', searchTerm)
-  }, [updateFilter])
-
-  const handleQuickTypeFilter = useCallback((type) => {
-    const currentTypes = filters.incidentTypes || []
-    const newTypes = currentTypes.includes(type)
-      ? currentTypes.filter(t => t !== type)
-      : [...currentTypes, type]
-    updateFilter('incidentTypes', newTypes)
-  }, [filters.incidentTypes, updateFilter])
-
-  // ✅ VERIFIED: Determine clustering approach
-  const shouldUseClustering = useMemo(() => {
-    if (mapState.viewMode === 'clusters') return true
-    if (mapState.viewMode === 'heatmap') return false
-    if (mapState.viewMode === 'hybrid') return filteredReports.length > 100
-    if (mapState.viewMode === 'markers') return performanceStats.isLargeDataset
-    return false
-  }, [mapState.viewMode, filteredReports.length, performanceStats.isLargeDataset])
-
-  // ✅ VERIFIED: User location handler
-  const handleCenterOnUser = useCallback(() => {
+  // ✅ SIMPLIFIED: User location handler
+  const handleCenterOnUser = () => {
     if (hasUserLocation) {
       centerOnUser()
     } else {
@@ -236,15 +137,13 @@ const MapPage = memo(() => {
             })
             centerOnUser()
           },
-          (error) => {
-            console.warn('Location access denied:', error.message)
-          }
+          (error) => console.warn('Location access denied:', error.message)
         )
       }
     }
-  }, [hasUserLocation, centerOnUser, setUserLocation])
+  }
 
-  // ✅ VERIFIED: Error handling
+  // ✅ ERROR HANDLING
   if (error) {
     return (
       <div className="min-h-screen bg-neutral-50 py-8">
@@ -264,7 +163,7 @@ const MapPage = memo(() => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-neutral-50 to-neutral-100">
 
-      {/* ✅ PHASE 1: EXTRACTED HEADER COMPONENTS */}
+      {/* ✅ PHASE 1: HEADER COMPONENTS */}
       <MapPageHeader
         filterStats={filterStats}
         performanceStats={performanceStats}
@@ -306,11 +205,11 @@ const MapPage = memo(() => {
         onViewModeChange={handleViewModeChange}
       />
 
-      {/* ✅ PHASE 2 & 3: MAIN CONTENT WITH EXTRACTED COMPONENTS */}
+      {/* ✅ PHASE 2 & 3: MAIN CONTENT */}
       <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-          {/* ✅ PHASE 2: EXTRACTED MAP SECTION (FIXED - includes insights) */}
+          {/* ✅ MAP SECTION (includes insights) */}
           <MapSection
             mapState={mapState}
             filteredReports={filteredReports}
@@ -331,7 +230,7 @@ const MapPage = memo(() => {
             hasActiveFilters={hasActiveFilters}
           />
 
-          {/* ✅ PHASE 3: EXTRACTED SIDEBAR */}
+          {/* ✅ SIDEBAR */}
           <div className="lg:col-span-4 xl:col-span-3">
             <div className="space-y-6">
 
@@ -385,12 +284,12 @@ const MapPage = memo(() => {
         </div>
       </div>
 
-      {/* ✅ VERIFIED: Enhanced Report CTA - PRESERVED */}
+      {/* ✅ REPORT CTA */}
       <div className="bg-white border-t border-neutral-200">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
           <div className="bg-gradient-to-br from-bangladesh-red to-bangladesh-red-dark text-white rounded-2xl p-8 lg:p-12 text-center shadow-lg">
             <div className="bg-white/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
-              <MapPin className="w-10 h-10 text-white" />
+              <Target className="w-10 h-10 text-white" />
             </div>
             <h2 className="text-2xl lg:text-3xl font-bold mb-4">
               Help Build Safer Communities
