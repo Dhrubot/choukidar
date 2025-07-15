@@ -4,10 +4,11 @@ import {
   MapPin, Zap, Map, Target, Flame, Layers
 } from 'lucide-react'
 import MapView from '../../components/Map/MapView'
+import MapInsights from './MapInsights'
 
 /**
- * MapSection Component - Extracted from MapPage.jsx Lines 700-1000
- * Handles map view, overlays, and view mode controls
+ * MapSection Component - Extracted from MapPage.jsx Lines 700-1200
+ * Handles map view, overlays, and insights cards (FIXED LAYOUT)
  */
 const MapSection = memo(({
   // Map state
@@ -34,6 +35,13 @@ const MapSection = memo(({
   
   // View mode handling
   onViewModeChange,
+  
+  // Props for MapInsights
+  filterStats,
+  clusterStats,
+  hasUserLocation,
+  isUserInBangladesh,
+  hasActiveFilters,
   
   // View mode configuration
   VIEW_MODE_CONFIG = {
@@ -124,6 +132,18 @@ const MapSection = memo(({
           )}
         </div>
       </div>
+
+      {/* ✅ FIXED: MapInsights now included INSIDE MapSection */}
+      <MapInsights
+        filterStats={filterStats}
+        performanceStats={performanceStats}
+        clusterStats={clusterStats}
+        mapState={mapState}
+        selectedMarker={selectedMarker}
+        hasUserLocation={hasUserLocation}
+        isUserInBangladesh={isUserInBangladesh}
+        hasActiveFilters={hasActiveFilters}
+      />
     </div>
   )
 })
