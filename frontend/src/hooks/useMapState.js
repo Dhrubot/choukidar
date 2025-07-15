@@ -57,7 +57,7 @@ const STORAGE_KEYS = {
  * @param {boolean} options.trackUserLocation - Whether to track user location
  * @returns {Object} Map state and control functions
  */
-const useMapState = (options = {}) => {
+export const useMapState = (options = {}) => {
   const {
     defaultCenter = DEFAULT_MAP_STATE.center,
     defaultZoom = DEFAULT_MAP_STATE.zoom,
@@ -336,5 +336,3 @@ const useMapState = (options = {}) => {
     })
   }
 }
-
-export default useMapState

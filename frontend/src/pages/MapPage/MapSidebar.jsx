@@ -586,7 +586,7 @@ const MapSidebar = memo(({
                 </span>
               )}
               <span className="text-xs text-neutral-400">
-                v{process.env.REACT_APP_VERSION || '1.0.0'}
+                v{import.meta.env.REACT_APP_VERSION || '1.0.0'}
               </span>
             </div>
           </div>

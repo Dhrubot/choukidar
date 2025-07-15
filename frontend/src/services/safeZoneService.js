@@ -12,7 +12,6 @@
  */
 
 import * as turf from '@turf/turf'
-import { distance, point, buffer, bbox, centroid, area } from '@turf/helpers'
 
 class SafeZoneService {
   constructor() {

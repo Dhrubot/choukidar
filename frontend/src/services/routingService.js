@@ -21,7 +21,7 @@ class RoutingService {
     // Configuration
     this.config = {
       // API configuration
-      apiKey: process.env.REACT_APP_OPENROUTE_API_KEY || null,
+      apiKey: import.meta.env.VITE_OPENROUTE_API_KEY || null,
       baseUrl: 'https://api.openrouteservice.org',
       
       // Caching configuration
