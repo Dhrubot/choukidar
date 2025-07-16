@@ -1,53 +1,41 @@
-// === frontend/src/services/core/apiClient.js ===
-// Core API Client for SafeStreets Bangladesh
-// EXTRACTED LINE-BY-LINE from original api.js (Lines 1-150 approximately)
-// Contains: Base request handling, authentication, retry logic, error handling
+// === Core API Client Infrastructure ===
+// HTTP request functionality extracted from api-old.js lines 1-150
+// Handles all HTTP communication, authentication headers, device fingerprinting, and caching
 
-// API Base URL configuration (PRESERVED EXACTLY)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// API Base URL configuration
+const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:5000/api';
 
-/**
- * Core API Client Class
- * EXTRACTED from original ApiService class constructor and core methods
- * Preserves ALL original functionality including:
- * - Device fingerprinting
- * - Authentication headers
- * - localStorage token handling
- * - Retry logic with exponential backoff
- * - Batch request processing
- * - Error handling and logging
- */
 class ApiClient {
   constructor() {
-    // Base configuration (PRESERVED EXACTLY - Original Lines 11-17)
+    // Base configuration
     this.baseURL = API_BASE_URL;
     this.deviceFingerprint = null;
-    
-    // Caching system from original (PRESERVED EXACTLY - Original Lines 15-16)
+
+    // Caching system from original
     this._safeZoneCache = new Map();
     this._cacheExpiry = 5 * 60 * 1000; // 5 minutes
   }
 
   // ========== DEVICE & AUTHENTICATION SETUP ==========
 
-  // Set device fingerprint for all requests (PRESERVED EXACTLY - Original Lines 22-24)
+  // Set device fingerprint for all requests (Enhanced version)
   setDeviceFingerprint(fingerprint) {
     this.deviceFingerprint = fingerprint;
   }
 
-  // Get authentication headers (PRESERVED EXACTLY - Original Lines 26-42)
+  // Get authentication headers (Enhanced version)
   getAuthHeaders() {
     const headers = {
       'Content-Type': 'application/json'
     };
 
-    // Add device fingerprint (PRESERVED EXACTLY - Original Lines 32-34)
+    // Add device fingerprint
     if (this.deviceFingerprint) {
       headers['x-device-fingerprint'] = this.deviceFingerprint;
     }
 
-    // Add admin token if available (PRESERVED EXACTLY - Original Lines 36-39)
-    const adminToken = localStorage.getItem('safestreets_admin_token');
+    // Add admin token if available
+    const adminToken = typeof localStorage !== 'undefined' ? localStorage.getItem('safestreets_admin_token') : null;
     if (adminToken) {
       headers['Authorization'] = `Bearer ${adminToken}`;
     }
@@ -57,7 +45,7 @@ class ApiClient {
 
   // ========== CORE REQUEST METHODS ==========
 
-  // Generic request method (PRESERVED EXACTLY - Original Lines 46-80)
+  // Generic request method (Merged: Enhanced error handling + Original structure)
   async request(endpoint, options = {}) {
     try {
       const url = `${this.baseURL}${endpoint}`;
@@ -79,8 +67,8 @@ class ApiClient {
 
     } catch (error) {
       console.error(`❌ API Error (${endpoint}):`, error);
-      
-      // Enhanced version error format (PRESERVED EXACTLY - Original Lines 73-77)
+
+      // Enhanced version error format
       return {
         success: false,
         message: error.message || 'Network error occurred',
@@ -89,10 +77,10 @@ class ApiClient {
     }
   }
 
-  // Original retry logic with enhanced error handling (PRESERVED EXACTLY - Original Lines 82-106)
+  // Original retry logic with enhanced error handling
   async requestWithRetry(endpoint, options = {}, maxRetries = 3) {
     let lastError;
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const result = await this.request(endpoint, options);
@@ -102,94 +90,105 @@ class ApiClient {
         lastError = new Error(result.message || 'Request failed');
       } catch (error) {
         lastError = error;
-        
-        // Don't retry on 4xx errors (client errors) (PRESERVED EXACTLY - Original Lines 95-97)
+
+        // Don't retry on 4xx errors (client errors)
         if (error.message.includes('4')) {
           throw error;
         }
-        
-        // Wait before retrying (exponential backoff) (PRESERVED EXACTLY - Original Lines 99-102)
+
+        // Wait before retrying (exponential backoff)
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
         }
       }
     }
-    
+
     throw lastError;
   }
 
-  // Enhanced retry with intelligence features (PRESERVED EXACTLY - Original Lines 108-137)
+  // Enhanced retry with intelligence features (Original)
   async requestWithIntelligenceRetry(endpoint, options = {}, maxRetries = 2) {
     let lastError;
-    
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         if (attempt > 0) {
           console.log(`🔄 Intelligence retry attempt ${attempt} for ${endpoint}`);
           await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
         }
-        
+
         return await this.request(endpoint, options);
       } catch (error) {
         lastError = error;
-        
-        // Don't retry for client errors (4xx) (PRESERVED EXACTLY - Original Lines 123-125)
+
+        // Don't retry for client errors (4xx)
         if (error.message.includes('40')) {
           throw error;
         }
-        
+
         if (attempt === maxRetries) {
           break;
         }
-        
+
         console.warn(`⚠️ Request failed (attempt ${attempt + 1}):`, error.message);
       }
     }
-    
+
     throw lastError;
   }
 
-  // Enhanced batch requests (PRESERVED EXACTLY - Original Lines 139-162)
+  // Enhanced batch requests (Enhanced version)
   async batchRequests(requests) {
     try {
-      const promises = requests.map(({ endpoint, options }) => 
+      const promises = requests.map(({ endpoint, options }) =>
         this.request(endpoint, options)
       );
-      
+
       const results = await Promise.allSettled(promises);
-      
+
       return results.map((result, index) => ({
         index,
         success: result.status === 'fulfilled' && result.value.success,
         data: result.status === 'fulfilled' ? result.value : null,
-        error: result.status === 'rejected' ? result.reason : 
-               (result.value && !result.value.success ? result.value.message : null)
+        error: result.status === 'rejected' ? result.reason :
+          (result.value && !result.value.success ? result.value.message : null)
       }));
-      
+
     } catch (error) {
       console.error('❌ Batch request error:', error);
       throw error;
     }
   }
 
-  // ========== CACHE MANAGEMENT (Safe Zone Cache) ==========
-  // PRESERVED EXACTLY from original api.js - Required by safe zone service
+  // ========== CACHING INFRASTRUCTURE ==========
 
-  // Get cached safe zones
-  getCachedSafeZones(key) {
-    const cached = this._safeZoneCache.get(key);
-    if (cached && Date.now() - cached.timestamp < this._cacheExpiry) {
+  // Simple in-memory cache for safe zones
+  async getCachedSafeZones(cacheKey, fetchFunction) {
+    const cached = this._safeZoneCache.get(cacheKey);
+
+    if (cached && (Date.now() - cached.timestamp) < this._cacheExpiry) {
+      console.log('🔄 Using cached safe zones data');
       return cached.data;
     }
-    return null;
-  }
 
-  // Set safe zone cache
-  setCachedSafeZones(key, data) {
-    this._safeZoneCache.set(key, {
-      data,
-      timestamp: Date.now()
-    });
+    try {
+      const freshData = await fetchFunction();
+      this._safeZoneCache.set(cacheKey, {
+        data: freshData,
+        timestamp: Date.now()
+      });
+
+      // Cleanup old cache entries
+      if (this._safeZoneCache.size > 50) {
+        const oldestKey = this._safeZoneCache.keys().next().value;
+        this._safeZoneCache.delete(oldestKey);
+      }
+
+      return freshData;
+    } catch (error) {
+      console.error('❌ Cache fetch error:', error);
+      throw error;
+    }
   }
 
   // Clear safe zone cache
@@ -200,51 +199,80 @@ class ApiClient {
 
   // ========== UTILITY METHODS ==========
 
-  // Get base URL
-  getBaseURL() {
-    return this.baseURL;
+  // Subscribe to real-time updates (Enhanced WebSocket URL)
+  getWebSocketUrl() {
+    const wsProtocol = (typeof window !== 'undefined' && window.location?.protocol === 'https:') ? 'wss:' : 'ws:';
+    const wsHost = this.baseURL.replace(/^https?:/, '').replace('/api', '');
+    return `${wsProtocol}${wsHost}/ws?deviceFingerprint=${this.deviceFingerprint}`;
   }
 
-  // Get device fingerprint
-  getDeviceFingerprint() {
-    return this.deviceFingerprint;
-  }
+  // Validate report data before submission
+  validateReportData(reportData) {
+    const errors = [];
 
-  // Check if device fingerprint is set
-  hasDeviceFingerprint() {
-    return !!this.deviceFingerprint;
-  }
+    if (!reportData.type) errors.push('Report type is required');
+    if (!reportData.description || reportData.description.length < 10) {
+      errors.push('Description must be at least 10 characters');
+    }
+    if (!reportData.location || !reportData.location.coordinates) {
+      errors.push('Location coordinates are required');
+    }
+    if (!reportData.severity || reportData.severity < 1 || reportData.severity > 5) {
+      errors.push('Severity must be between 1 and 5');
+    }
 
-  // Get cache stats
-  getCacheStats() {
     return {
-      safeZoneCacheSize: this._safeZoneCache.size,
-      cacheExpiry: this._cacheExpiry
+      isValid: errors.length === 0,
+      errors
     };
+  }
+
+  // Format API errors for user display
+  formatApiError(error) {
+    if (typeof error === 'string') return error;
+
+    if (error.message) {
+      // Clean up common API error messages
+      if (error.message.includes('Failed to fetch')) {
+        return 'Unable to connect to server. Please check your internet connection.';
+      }
+      if (error.message.includes('404')) {
+        return 'The requested resource was not found.';
+      }
+      if (error.message.includes('500')) {
+        return 'Server error. Please try again later.';
+      }
+      return error.message;
+    }
+
+    return 'An unexpected error occurred. Please try again.';
+  }
+
+  // ========== HEALTH CHECK METHODS ==========
+
+  // Health check (Original version method name)
+  async healthCheck() {
+    return this.request('/health');
+  }
+
+  // Check health (Enhanced version method name)
+  async checkHealth() {
+    return this.request('/health');
+  }
+
+  // Get API status and features (Enhanced version)
+  async getApiStatus() {
+    return this.request('/');
+  }
+
+  // Get API info (Original version)
+  async getApiInfo() {
+    return this.request('/health');
   }
 }
 
-// Create and export singleton instance (PRESERVED EXACTLY - Original pattern)
+// Create and export singleton instance
 const apiClient = new ApiClient();
 
 export default apiClient;
-
-// Export class for testing (PRESERVED EXACTLY - Original pattern)
 export { ApiClient };
-
-// Export individual methods for convenience (PRESERVED EXACTLY - Original pattern)
-export const {
-  setDeviceFingerprint,
-  getAuthHeaders,
-  request,
-  requestWithRetry,
-  requestWithIntelligenceRetry,
-  batchRequests,
-  getCachedSafeZones,
-  setCachedSafeZones,
-  clearSafeZoneCache,
-  getBaseURL,
-  getDeviceFingerprint,
-  hasDeviceFingerprint,
-  getCacheStats
-} = apiClient;
