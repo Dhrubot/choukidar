@@ -1,12 +1,13 @@
-// === src/pages/AdminPage.jsx (UPDATED - With Moderation Interface) ===
+// === src/pages/AdminPage.jsx (COMPLETE - With Security Dashboard Integration) ===
 import { useState, useEffect, useRef } from 'react'
 import { 
-  Shield, Users, TrendingUp, Clock, AlertTriangle, CheckCircle, 
+  Shield, Users, TrendingUp, Clock, AlertTriangle, CheckCircle, XCircle,
   Eye, Flag, Globe, MapPin, RefreshCw, ArrowRight, ExternalLink,
   FileText, Calendar, Activity, List, BarChart3, Settings
 } from 'lucide-react'
 import apiService from '../services/api'
 import ModerationQueue from '../components/Admin/ModerationQueue'
+import SecurityDashboard from '../components/Admin/SecurityDashboard'
 
 function AdminPage() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -125,7 +126,7 @@ function AdminPage() {
   const securityRisk = stats.security.flaggedReports > 0 ? 'High' : 'Low'
   const bangladeshCoverage = stats.total > 0 ? ((stats.security.bangladeshReports / stats.total) * 100).toFixed(1) : 0
 
-  // Tab configuration
+  // Tab configuration - Updated with Security tab
   const tabs = [
     { 
       id: 'dashboard', 
@@ -138,6 +139,13 @@ function AdminPage() {
       label: 'Moderation Queue', 
       icon: List,
       badge: moderationBacklog > 0 ? moderationBacklog : null
+    },
+    { 
+      id: 'security', 
+      label: 'Security Monitor', 
+      icon: Shield,
+      badge: stats.security.flaggedReports > 0 ? stats.security.flaggedReports : null,
+      badgeColor: 'bg-red-500'
     },
     { 
       id: 'analytics', 
@@ -218,7 +226,7 @@ function AdminPage() {
                   <button
                     key={tab.id}
                     onClick={() => !tab.disabled && setActiveTab(tab.id)}
-                                        className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                       activeTab === tab.id
                         ? 'border-safe-primary text-safe-primary'
                         : tab.disabled 
@@ -230,7 +238,9 @@ function AdminPage() {
                     <Icon className="w-4 h-4" />
                     <span>{tab.label}</span>
                     {tab.badge && (
-                      <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                      <span className={`text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center ${
+                        tab.badgeColor || 'bg-red-500'
+                      }`}>
                         {tab.badge}
                       </span>
                     )}
@@ -311,7 +321,7 @@ function AdminPage() {
               <div className="card group hover:shadow-medium transition-all duration-300">
                 <div className="card-body text-center">
                   <div className="bg-red-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3 group-hover:bg-red-200 transition-colors">
-                    <Users className="w-6 h-6 text-red-600" />
+                    <XCircle className="w-6 h-6 text-red-600" />
                   </div>
                   <h3 className="text-2xl font-bold text-neutral-800">{stats.rejected}</h3>
                   <p className="text-neutral-600 text-sm">Rejected</p>
@@ -388,11 +398,11 @@ function AdminPage() {
                   
                   {stats.security.flaggedReports > 0 ? (
                     <button 
-                      onClick={() => setActiveTab('moderation')}
+                      onClick={() => setActiveTab('security')}
                       className="btn-outline w-full mt-4 flex items-center justify-center text-red-600 border-red-600 hover:bg-red-50"
                     >
                       <AlertTriangle className="w-4 h-4 mr-2" />
-                      Review Flagged Reports
+                      Review Security Alerts
                     </button>
                   ) : (
                     <div className="text-center text-green-600 text-sm mt-4">
@@ -552,6 +562,11 @@ function AdminPage() {
         {/* Moderation Queue Tab */}
         {activeTab === 'moderation' && (
           <ModerationQueue />
+        )}
+
+        {/* Security Dashboard Tab - NEW */}
+        {activeTab === 'security' && (
+          <SecurityDashboard />
         )}
 
         {/* Coming Soon Tabs */}
