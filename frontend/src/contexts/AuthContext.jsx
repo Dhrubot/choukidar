@@ -604,7 +604,8 @@ export const useAdminAuth = () => {
     logoutAdmin,
     hasAdminPermission,
     error,
-    loginError
+    loginError,
+    clearErrors
   } = useAuth();
   
   return {
@@ -618,7 +619,8 @@ export const useAdminAuth = () => {
     logoutAdmin,
     hasAdminPermission,
     error,
-    loginError
+    loginError,
+    clearErrors
   };
 };
 

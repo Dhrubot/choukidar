@@ -2,12 +2,17 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Menu, X, Shield } from 'lucide-react'
+import { useAdminAuth } from '../../contexts/AuthContext';
 
 function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const location = useLocation()
+  const { isAuthenticated, adminUser } = useAdminAuth();
 
   const isActive = (path) => location.pathname === path
+
+   // Determine if the user is an authenticated admin
+  const isAdminAuthenticated = isAuthenticated && adminUser;
 
   return (
     <header className="bg-white/95 backdrop-blur-sm shadow-soft sticky top-0 z-50 border-b border-neutral-200">
@@ -56,7 +61,7 @@ function Header() {
             >
               Report
             </Link>
-            <Link 
+            { isAdminAuthenticated && <Link 
               to="/admin" 
               className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                 isActive('/admin') 
@@ -65,7 +70,7 @@ function Header() {
               }`}
             >
               Admin
-            </Link>
+            </Link>}
           </nav>
 
           {/* Mobile menu button */}
@@ -118,7 +123,7 @@ function Header() {
               >
                 Report
               </Link>
-              <Link 
+              { isAdminAuthenticated && <Link 
                 to="/admin" 
                 className={`px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
                   isActive('/admin') 
@@ -128,7 +133,7 @@ function Header() {
                 onClick={() => setIsMenuOpen(false)}
               >
                 Admin
-              </Link>
+              </Link>}
             </nav>
           </div>
         )}

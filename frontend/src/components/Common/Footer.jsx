@@ -1,5 +1,6 @@
-// === src/components/Common/Footer.jsx ===
+// === frontend/src/components/Common/Footer.jsx ===
 import { Shield, Mail, Phone, MapPin, Globe, AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 function Footer() {
   return (
@@ -33,31 +34,25 @@ function Footer() {
               <h3 className="text-lg font-bold mb-6 text-white">Quick Links</h3>
               <ul className="space-y-3">
                 <li>
-                  <a href="/map" className="text-neutral-300 hover:text-white transition-colors duration-200 flex items-center group">
+                  <Link to="/map" className="text-neutral-300 hover:text-white transition-colors duration-200 flex items-center group">
                     <MapPin className="w-4 h-4 mr-2 group-hover:text-safe-primary" />
                     Crime Map
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a href="/report" className="text-neutral-300 hover:text-white transition-colors duration-200 flex items-center group">
+                  <Link to="/report" className="text-neutral-300 hover:text-white transition-colors duration-200 flex items-center group">
                     <Shield className="w-4 h-4 mr-2 group-hover:text-safe-secondary" />
                     Report Incident
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a href="#" className="text-neutral-300 hover:text-white transition-colors duration-200">
-                    Safety Tips
-                  </a>
+                  <a href="#" className="text-neutral-300 hover:text-white transition-colors duration-200">Safety Tips</a>
                 </li>
                 <li>
-                  <a href="#" className="text-neutral-300 hover:text-white transition-colors duration-200">
-                    Community Guidelines
-                  </a>
+                  <a href="#" className="text-neutral-300 hover:text-white transition-colors duration-200">Community Guidelines</a>
                 </li>
                 <li>
-                  <a href="#" className="text-neutral-300 hover:text-white transition-colors duration-200">
-                    Privacy Policy
-                  </a>
+                  <a href="#" className="text-neutral-300 hover:text-white transition-colors duration-200">Help & Support</a>
                 </li>
               </ul>
             </div>
@@ -75,7 +70,7 @@ function Footer() {
                     <div className="text-neutral-300 text-sm">999</div>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-3">
                   <div className="bg-safe-warning rounded-lg p-2">
                     <Phone className="w-4 h-4 text-white" />
@@ -85,7 +80,7 @@ function Footer() {
                     <div className="text-neutral-300 text-sm">199</div>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-3">
                   <div className="bg-safe-primary rounded-lg p-2">
                     <Mail className="w-4 h-4 text-white" />
@@ -96,32 +91,71 @@ function Footer() {
                   </div>
                 </div>
               </div>
-              
-              <div className="mt-6 p-4 bg-neutral-700 rounded-lg">
-                <div className="flex items-center space-x-2 text-safe-secondary mb-2">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span className="font-medium text-sm">Emergency Alert</span>
-                </div>
-                <p className="text-xs text-neutral-300">
-                  For immediate danger, call 999 directly. SafeStreets is for reporting and mapping, not emergency response.
+            </div>
+          </div>
+
+          {/* Support Info Below Grid */}
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              <h3 className="text-lg font-bold mb-4 text-white">Contact & Support</h3>
+              <ul className="space-y-3">
+                <li className="flex items-center text-neutral-300">
+                  <Mail className="w-4 h-4 mr-2 text-safe-primary" />
+                  <a href="mailto:support@safestreetsbd.org" className="hover:text-white transition-colors">
+                    support@safestreetsbd.org
+                  </a>
+                </li>
+                <li className="flex items-center text-neutral-300">
+                  <Phone className="w-4 h-4 mr-2 text-safe-primary" />
+                  <a href="tel:+8801234567890" className="hover:text-white transition-colors">
+                    +880 123 456 7890
+                  </a>
+                </li>
+                <li className="flex items-start text-neutral-300 mt-4">
+                  <MapPin className="w-4 h-4 mr-2 text-safe-primary mt-1 flex-shrink-0" />
+                  <span>
+                    Dhaka, Bangladesh<br />
+                    <span className="text-sm">Serving all districts nationwide</span>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Emergency Notice */}
+          <div className="mt-12 p-6 bg-red-900/30 border border-red-700/50 rounded-lg">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
+              <div>
+                <h4 className="text-red-200 font-bold mb-2">⚠️ Emergency Situations</h4>
+                <p className="text-red-300 text-sm leading-relaxed">
+                  For immediate emergencies, contact local police (999) or emergency services (911). 
+                  SafeStreets is for reporting and mapping, not emergency response.
                 </p>
               </div>
             </div>
           </div>
         </div>
       </div>
-      
+
       {/* Bottom Bar */}
       <div className="border-t border-neutral-700 py-6">
         <div className="container-safe">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p className="text-neutral-400 text-sm">
-              © 2025 SafeStreets Bangladesh. Made with ❤️ for safer communities.
+              © 2025 Choukidar Bangladesh. Made for a safer Bangladesh.
             </p>
             <div className="flex items-center space-x-6 text-sm text-neutral-400">
               <a href="#" className="hover:text-white transition-colors">Terms</a>
               <a href="#" className="hover:text-white transition-colors">Privacy</a>
               <a href="#" className="hover:text-white transition-colors">Contact</a>
+              <Link
+                to="/admin/login"
+                className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                title="System Administration"
+              >
+                System Administration
+              </Link>
             </div>
           </div>
         </div>
