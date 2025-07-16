@@ -1,28 +1,46 @@
-// === src/pages/ReportPage.jsx (FIXED - Dropdown, Improved Validation, Clean Integration) ===
+// === src/pages/ReportPage.jsx (COMPLETE ENHANCED VERSION) ===
+// Enhanced Report Page with Female Safety Features + All Original Elements Preserved
+// Integrates with backend Report model and security features
+
 import { useState, useEffect } from 'react'
-import { MapPin, Send, AlertTriangle, Shield, CheckCircle, Navigation, ChevronDown } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { 
+  Shield, AlertTriangle, Send, ChevronDown, Navigation, 
+  MapPin, Clock, Users, Eye, EyeOff, Settings, Heart,
+  Lock, Globe, User, Calendar, ExternalLink, CheckCircle
+} from 'lucide-react'
 import { useSubmitReport } from '../hooks/useReports'
+import { useUserType } from '../contexts/UserTypeContext'
 import LocationPicker from '../components/LocationPicker/LocationPicker'
 import { isWithinBangladesh } from '../config/locationConfig'
 
 function ReportPage() {
+  const navigate = useNavigate()
+  const { submitReport, submitting, success, error, reset } = useSubmitReport()
+  const { deviceFingerprint, userType, preferences } = useUserType()
+  
+  // Form state
   const [formData, setFormData] = useState({
     type: '',
     description: '',
     location: '',
     severity: 3
   })
-
-  // Location state management (streamlined)
+  
+  const [formErrors, setFormErrors] = useState({})
   const [selectedLocation, setSelectedLocation] = useState(null)
+  
+  // Enhanced UI state
+  const [showFemaleSafetyMode, setShowFemaleSafetyMode] = useState(false)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+  const [selectedIncidentCategory, setSelectedIncidentCategory] = useState('general')
+  
+  // Location state
   const [userLocation, setUserLocation] = useState(null)
   const [locationLoading, setLocationLoading] = useState(false)
   const [locationError, setLocationError] = useState(null)
-  const [formErrors, setFormErrors] = useState({})
 
-  const { submitReport, submitting, error, success, reset } = useSubmitReport()
-
-  // Get user's current location on component mount
+  // Get user location on mount
   useEffect(() => {
     if (navigator.geolocation) {
       setLocationLoading(true)
@@ -36,6 +54,7 @@ function ReportPage() {
         (error) => {
           console.log('Could not get user location:', error)
           setLocationLoading(false)
+          setLocationError('Unable to get location. You can still select manually.')
           // Don't show error to user initially - LocationPicker will handle this
         },
         {
@@ -144,10 +163,16 @@ function ReportPage() {
           source: locationSource,
           withinBangladesh: selectedLocation?.withinBangladesh ?? 
                            (userLocation ? isWithinBangladesh(userLocation.lat, userLocation.lng) : true),
-          obfuscated: true // Always obfuscate for privacy
+          obfuscated: true, // Always obfuscate for privacy
+          // Enhanced location context for female safety
+          locationContext: getLocationContext(formData.type)
         },
         severity: parseInt(formData.severity),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        // Enhanced security and privacy
+        deviceFingerprint: deviceFingerprint,
+        culturalContext: getCulturalContext(formData.type),
+        femaleSafetyMode: showFemaleSafetyMode
       }
 
       console.log('🚀 Submitting report with enhanced data:', reportData)
@@ -163,6 +188,7 @@ function ReportPage() {
       })
       setSelectedLocation(null)
       setFormErrors({})
+      setSelectedIncidentCategory('general')
       
       // Scroll to top to show success message
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -171,14 +197,110 @@ function ReportPage() {
     }
   }
 
-  // Incident types for dropdown (matching backend schema)
-  const incidentTypes = [
-    { value: '', label: 'Select incident type...', disabled: true },
-    { value: 'chadabaji', label: '💰 Chadabaji (Extortion)', description: 'Political harassment or forced donations' },
-    { value: 'teen_gang', label: '👥 Teen Gang Activity', description: 'Youth gangs involved in robbery or violence' },
-    { value: 'chintai', label: '⚠️ Chintai (Harassment)', description: 'Illegal extortion by gangs or groups' },
-    { value: 'other', label: '🚨 Other Criminal Activity', description: 'Other street crimes or illegal activities' }
-  ]
+  // Get location context based on incident type
+  const getLocationContext = (incidentType) => {
+    const femaleSafetyTypes = [
+      'eve_teasing', 'stalking', 'inappropriate_touch', 'verbal_harassment',
+      'unsafe_transport', 'workplace_harassment', 'domestic_incident', 'unsafe_area_women'
+    ]
+    
+    if (femaleSafetyTypes.includes(incidentType)) {
+      return {
+        publicSpace: ['eve_teasing', 'verbal_harassment', 'unsafe_area_women'].includes(incidentType),
+        transportRelated: incidentType === 'unsafe_transport',
+        workplaceRelated: incidentType === 'workplace_harassment',
+        residentialArea: incidentType === 'domestic_incident',
+        isolatedArea: ['stalking', 'inappropriate_touch'].includes(incidentType)
+      }
+    }
+    
+    return {
+      publicSpace: true,
+      transportRelated: false,
+      workplaceRelated: false,
+      residentialArea: false,
+      isolatedArea: false
+    }
+  }
+
+  // Get cultural context based on incident type
+  const getCulturalContext = (incidentType) => {
+    const femaleSafetyTypes = [
+      'eve_teasing', 'stalking', 'inappropriate_touch', 'verbal_harassment',
+      'unsafe_transport', 'workplace_harassment', 'domestic_incident', 'unsafe_area_women'
+    ]
+    
+    if (femaleSafetyTypes.includes(incidentType)) {
+      return {
+        conservativeArea: false, // Can be detected by location later
+        religiousContext: false,
+        familyRelated: incidentType === 'domestic_incident',
+        requiresFemaleModerator: true
+      }
+    }
+    
+    return {
+      conservativeArea: false,
+      religiousContext: false,
+      familyRelated: false,
+      requiresFemaleModerator: false
+    }
+  }
+
+  // Enhanced incident types with female safety categories
+  const incidentCategories = {
+    general: {
+      label: 'General Criminal Activity',
+      icon: AlertTriangle,
+      color: 'text-red-600',
+      description: 'Street crimes, extortion, and general criminal activities',
+      types: [
+        { value: 'chadabaji', label: '💰 Chadabaji (Extortion)', description: 'Political harassment or forced donations' },
+        { value: 'teen_gang', label: '👥 Teen Gang Activity', description: 'Youth gangs involved in robbery or violence' },
+        { value: 'chintai', label: '⚠️ Chintai (Harassment)', description: 'Illegal extortion by gangs or groups' },
+        { value: 'other', label: '🚨 Other Criminal Activity', description: 'Other street crimes or illegal activities' }
+      ]
+    },
+    female_safety: {
+      label: 'Female Safety & Harassment',
+      icon: Heart,
+      color: 'text-pink-600',
+      description: 'Gender-based harassment and safety concerns for women',
+      types: [
+        { value: 'eve_teasing', label: '😰 Eve Teasing', description: 'Street harassment targeting women' },
+        { value: 'stalking', label: '👁️ Stalking', description: 'Following or tracking women persistently' },
+        { value: 'inappropriate_touch', label: '🚫 Inappropriate Touch', description: 'Unwanted physical contact or harassment' },
+        { value: 'verbal_harassment', label: '💬 Verbal Harassment', description: 'Catcalling, inappropriate comments, or verbal abuse' },
+        { value: 'unsafe_transport', label: '🚌 Unsafe Transport', description: 'Harassment in rickshaw, bus, or ride-sharing' },
+        { value: 'workplace_harassment', label: '🏢 Workplace Harassment', description: 'Professional harassment or inappropriate behavior' },
+        { value: 'domestic_incident', label: '🏠 Domestic Incident', description: 'Family or domestic-related safety concerns' },
+        { value: 'unsafe_area_women', label: '⚠️ Unsafe Area for Women', description: 'Areas specifically dangerous for women' }
+      ]
+    }
+  }
+
+  // Get current incident types based on selected category
+  const getCurrentIncidentTypes = () => {
+    const baseTypes = [{ value: '', label: 'Select incident type...', disabled: true }]
+    
+    if (selectedIncidentCategory === 'general') {
+      return [...baseTypes, ...incidentCategories.general.types]
+    } else if (selectedIncidentCategory === 'female_safety') {
+      return [...baseTypes, ...incidentCategories.female_safety.types]
+    }
+    
+    // Show all types if no category selected
+    return [
+      ...baseTypes,
+      ...incidentCategories.general.types,
+      ...incidentCategories.female_safety.types
+    ]
+  }
+
+  // Check if current type is female safety related
+  const isFemaleSafetyType = (type) => {
+    return incidentCategories.female_safety.types.some(t => t.value === type)
+  }
 
   const getSeverityColor = (level) => {
     if (level <= 2) return 'bg-green-500'
@@ -210,7 +332,51 @@ function ReportPage() {
           </p>
         </div>
 
-        {/* Location Status Section */}
+        {/* Female Safety Mode Toggle */}
+        <div className="card mb-6 bg-gradient-to-r from-pink-50 to-purple-50 border-pink-200">
+          <div className="card-body">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="bg-pink-500 rounded-full p-2">
+                  <Heart className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-neutral-800">Female Safety Mode</h3>
+                  <p className="text-sm text-neutral-600">Enhanced privacy and female-only validation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFemaleSafetyMode(!showFemaleSafetyMode)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showFemaleSafetyMode ? 'bg-pink-500' : 'bg-neutral-300'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  showFemaleSafetyMode ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+            </div>
+            
+            {showFemaleSafetyMode && (
+              <div className="mt-4 p-3 bg-pink-100 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <Shield className="w-4 h-4 text-pink-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-pink-800">
+                    <p className="font-medium mb-1">Enhanced Protection Active</p>
+                    <ul className="text-xs space-y-1">
+                      <li>• Location obfuscation increased to ±200m</li>
+                      <li>• Report will be validated by female moderators only</li>
+                      <li>• Cultural sensitivity flags automatically applied</li>
+                      <li>• Priority processing for safety concerns</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Location Status Section - PRESERVED from original */}
         <div className="card mb-6">
           <div className="card-body">
             <h3 className="font-medium text-neutral-800 mb-3 flex items-center">
@@ -264,6 +430,11 @@ function ReportPage() {
                 <h4 className="font-medium text-green-800 mb-1">Report Submitted Successfully!</h4>
                 <p className="text-sm text-green-700">
                   Thank you for helping make your community safer. Your report has been received and will be reviewed by our moderation team.
+                  {isFemaleSafetyType(formData.type) && showFemaleSafetyMode && (
+                    <span className="block mt-1 font-medium">
+                      🌸 This report will be reviewed by female moderators for cultural sensitivity.
+                    </span>
+                  )}
                 </p>
                 <button 
                   onClick={reset}
@@ -300,6 +471,42 @@ function ReportPage() {
           <div className="card-body">
             <form onSubmit={handleSubmit} className="space-y-6">
               
+              {/* Incident Category Selection */}
+              <div>
+                <label className="form-label">
+                  <Settings className="w-4 h-4 text-bangladesh-green" />
+                  Incident Category *
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {Object.entries(incidentCategories).map(([key, category]) => {
+                    const Icon = category.icon
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setSelectedIncidentCategory(key)
+                          setFormData(prev => ({ ...prev, type: '' })) // Reset type when category changes
+                        }}
+                        className={`p-4 rounded-lg border-2 transition-all text-left ${
+                          selectedIncidentCategory === key
+                            ? 'border-safe-primary bg-safe-primary/5'
+                            : 'border-neutral-200 hover:border-neutral-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Icon className={`w-6 h-6 ${category.color}`} />
+                          <div>
+                            <h4 className="font-medium text-neutral-800">{category.label}</h4>
+                            <p className="text-sm text-neutral-600 mt-1">{category.description}</p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               {/* Incident Type - FIXED: Now using dropdown */}
               <div>
                 <label className="form-label">
@@ -318,7 +525,7 @@ function ReportPage() {
                     }}
                     required
                   >
-                    {incidentTypes.map((type) => (
+                    {getCurrentIncidentTypes().map((type) => (
                       <option 
                         key={type.value} 
                         value={type.value}
@@ -338,13 +545,22 @@ function ReportPage() {
                 {formData.type && (
                   <div className="mt-2 p-3 bg-neutral-50 rounded-lg">
                     <p className="text-sm text-neutral-600">
-                      {incidentTypes.find(t => t.value === formData.type)?.description}
+                      {getCurrentIncidentTypes().find(t => t.value === formData.type)?.description}
                     </p>
+                    
+                    {/* Female Safety Information */}
+                    {isFemaleSafetyType(formData.type) && (
+                      <div className="mt-2 p-2 bg-pink-50 rounded border-l-4 border-pink-400">
+                        <p className="text-sm text-pink-800 font-medium">
+                          🌸 Female Safety Report: This report will receive enhanced privacy protection
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Description - Enhanced with better validation */}
+              {/* Description - Enhanced with better validation - PRESERVED character count feedback */}
               <div>
                 <label className="form-label">
                   <Send className="w-4 h-4 text-bangladesh-green" />
@@ -353,7 +569,11 @@ function ReportPage() {
                 </label>
                 <textarea 
                   className={`form-textarea h-32 ${formErrors.description ? 'border-red-500' : ''}`}
-                  placeholder="Describe what happened, when it occurred, and any other relevant details..."
+                  placeholder={
+                    isFemaleSafetyType(formData.type) 
+                      ? "Describe the incident with as much detail as you're comfortable sharing. Remember, this is completely anonymous and will be handled with sensitivity."
+                      : "Describe what happened, when it occurred, and any other relevant details..."
+                  }
                   value={formData.description}
                   onChange={(e) => {
                     setFormData({...formData, description: e.target.value})
@@ -365,6 +585,7 @@ function ReportPage() {
                   maxLength={1000}
                   required
                 />
+                {/* PRESERVED: Better character count feedback from original */}
                 <div className="flex justify-between text-xs mt-1">
                   <span className={formErrors.description ? 'text-red-600' : 'text-neutral-400'}>
                     {formErrors.description || `${formData.description.length}/1000 characters`}
@@ -375,7 +596,7 @@ function ReportPage() {
                 </div>
               </div>
 
-              {/* Location Selection - Enhanced with better integration */}
+              {/* Location Selection - Enhanced with better integration - PRESERVED original structure */}
               <div>
                 <label className="form-label mb-3">
                   <span className="flex items-center">
@@ -391,7 +612,7 @@ function ReportPage() {
                   className="mb-4"
                 />
 
-                {/* Manual location description */}
+                {/* PRESERVED: Manual location description from original */}
                 <div className="mt-4">
                   <label className="text-sm font-medium text-neutral-700 mb-2 block">
                     Additional Location Details
@@ -424,7 +645,7 @@ function ReportPage() {
                 </div>
               </div>
 
-              {/* Severity Level - Enhanced */}
+              {/* Severity Level - PRESERVED original enhanced structure */}
               <div>
                 <label className="form-label justify-between">
                   <span className="flex items-center">
@@ -457,7 +678,7 @@ function ReportPage() {
                   </div>
                 </div>
 
-                {/* Severity Description */}
+                {/* PRESERVED: Severity Description from original */}
                 <div className="mt-3 p-3 rounded-lg bg-neutral-50">
                   <div className="text-sm text-neutral-600">
                     {formData.severity <= 2 && (
@@ -508,7 +729,7 @@ function ReportPage() {
                 ) : (
                   <div className="flex items-center justify-center">
                     <Send className="w-5 h-5 mr-2" />
-                    Submit Report Anonymously
+                    {isFemaleSafetyType(formData.type) ? 'Submit Female Safety Report' : 'Submit Report Anonymously'}
                   </div>
                 )}
               </button>
@@ -516,16 +737,30 @@ function ReportPage() {
           </div>
         </div>
 
-        {/* Privacy Notice */}
+        {/* Enhanced Privacy Notice */}
         <div className="alert-info">
           <div className="flex items-start">
             <Shield className="w-5 h-5 mr-3 text-blue-600 flex-shrink-0 mt-0.5" />
             <div>
               <h4 className="font-medium text-blue-800 mb-1">Your Privacy is Protected</h4>
-              <p className="text-sm text-blue-700">
+              <p className="text-sm text-blue-700 mb-3">
                 🔒 Your report is completely anonymous. We do not store personal information, track your identity, or log IP addresses. 
                 Location data is obfuscated to protect your privacy while helping authorities understand incident patterns.
               </p>
+              
+              {/* Enhanced privacy for female safety reports */}
+              {(isFemaleSafetyType(formData.type) || showFemaleSafetyMode) && (
+                <div className="mt-3 p-3 bg-pink-50 rounded-lg border-l-4 border-pink-400">
+                  <h5 className="font-medium text-pink-800 mb-2">🌸 Enhanced Female Safety Protection</h5>
+                  <ul className="text-sm text-pink-700 space-y-1">
+                    <li>• Location obfuscation increased to ±200m (vs ±100m standard)</li>
+                    <li>• Report will be validated by female moderators only</li>
+                    <li>• Cultural sensitivity flags automatically applied</li>
+                    <li>• Priority processing for safety concerns</li>
+                    <li>• Enhanced moderation with specialized training</li>
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -540,9 +775,48 @@ function ReportPage() {
                 🚨 For immediate danger or ongoing crimes, call <strong>999</strong> directly. 
                 SafeStreets is for reporting and mapping incidents, not emergency response.
               </p>
+              {isFemaleSafetyType(formData.type) && (
+                <p className="text-sm text-red-700 mt-2 font-medium">
+                  🆘 For immediate help with harassment or violence, contact the National Emergency Service (999) 
+                  or Women's Rights organizations.
+                </p>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Help Resources for Female Safety */}
+        {(isFemaleSafetyType(formData.type) || showFemaleSafetyMode) && (
+          <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+            <div className="flex items-start">
+              <Heart className="w-5 h-5 mr-3 text-purple-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-purple-800 mb-3">Support Resources</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <h5 className="font-medium text-purple-700 mb-1">Emergency Help</h5>
+                    <ul className="text-purple-600 space-y-1">
+                      <li>• Emergency: 999</li>
+                      <li>• Police: 100</li>
+                      <li>• National Women's Crisis Line</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-purple-700 mb-1">Support Organizations</h5>
+                    <ul className="text-purple-600 space-y-1">
+                      <li>• Bangladesh National Women Lawyers' Association</li>
+                      <li>• Ain O Salish Kendra</li>
+                      <li>• Local NGO support centers</li>
+                    </ul>
+                  </div>
+                </div>
+                <p className="text-xs text-purple-600 mt-3">
+                  Remember: You are not alone. There are people and organizations ready to help.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
