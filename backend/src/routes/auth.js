@@ -1,23 +1,34 @@
 // === backend/src/routes/auth.js ===
-// Authentication Routes for SafeStreets Bangladesh
-// Handles admin login, user type switching, and session management
+// Enhanced Authentication Routes with All New Features
 
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const User = require('../models/User');
-const DeviceFingerprint = require('../models/DeviceFingerprint');
-const userTypeDetection = require('../middleware/userTypeDetection');
-const { requireAdmin, requirePermission } = require('../middleware/roleBasedAccess');
+const AuditLog = require('../models/AuditLog');
+const TokenManager = require('../middleware/tokenManager');
+const RoleMiddleware = require('../middleware/roleSpecificMiddleware');
+const EmailService = require('../services/emailService');
+const { requireEmailVerification, requireEmailVerificationForLogin } = require('../middleware/emailVerification');
+const { loginLimiter, passwordResetLimiter, twoFactorLimiter, refreshLimiter } = require('../middleware/rateLimiter');
+const { userTypeDetection } = require('../middleware/userTypeDetection');
 
-// Apply user type detection to all auth routes
 router.use(userTypeDetection);
 
-// === ADMIN AUTHENTICATION ===
+// Audit logging helper
+const logAuthAction = async (actor, actionType, outcome, details = {}, severity = 'low', target = {}) => {
+  try {
+    await AuditLog.create({ actor, actionType, outcome, details, severity, target });
+  } catch (error) {
+    console.error(`❌ Audit log failed for action ${actionType}:`, error);
+  }
+};
 
-// POST /api/auth/admin/login - Admin login
-router.post('/admin/login', async (req, res) => {
+// POST /api/auth/admin/login - Enhanced admin login with email verification
+router.post('/admin/login', loginLimiter, async (req, res) => {
   try {
     const { username, password, deviceFingerprint } = req.body;
+    const actor = { username, ipAddress: req.ip };
     
     if (!username || !password) {
       return res.status(400).json({
@@ -26,33 +37,34 @@ router.post('/admin/login', async (req, res) => {
       });
     }
     
-    // Find admin user
     const adminUser = await User.findOne({
       userType: 'admin',
       'roleData.admin.username': username
     });
     
     if (!adminUser) {
-      console.log(`❌ Admin login attempt with invalid username: ${username}`);
+      await logAuthAction(actor, 'admin_login', 'failure', { reason: 'Invalid username' }, 'medium');
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
     }
     
-    // Check if account is locked
+    actor.userId = adminUser._id;
+    actor.userType = 'admin';
+    
+    // Check account lock status
     if (adminUser.roleData.admin.accountLocked) {
       const lockUntil = adminUser.roleData.admin.lockUntil;
       if (lockUntil && lockUntil > new Date()) {
-        const minutesLeft = Math.ceil((lockUntil - new Date()) / (1000 * 60));
-        console.log(`🔒 Admin login attempt for locked account: ${username}`);
+        await logAuthAction(actor, 'admin_login', 'failure', { reason: 'Account locked' }, 'high');
         return res.status(423).json({
           success: false,
-          message: `Account locked. Try again in ${minutesLeft} minutes.`,
-          lockUntil: lockUntil
+          message: 'Account is locked. Please contact an administrator.',
+          accountLocked: true
         });
       } else {
-        // Lock expired, reset
+        // Reset expired lock
         adminUser.roleData.admin.accountLocked = false;
         adminUser.roleData.admin.lockUntil = null;
         adminUser.roleData.admin.loginAttempts = 0;
@@ -61,83 +73,88 @@ router.post('/admin/login', async (req, res) => {
     
     // Verify password
     const isValidPassword = await adminUser.comparePassword(password);
-    
     if (!isValidPassword) {
-      console.log(`❌ Invalid password for admin: ${username}`);
-      
-      // Increment login attempts
       adminUser.incrementLoginAttempts();
       await adminUser.save();
-      
+      await logAuthAction(actor, 'admin_login', 'failure', { reason: 'Invalid password' }, 'medium');
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials',
-        attemptsRemaining: Math.max(0, 5 - adminUser.roleData.admin.loginAttempts)
+        message: 'Invalid credentials'
       });
     }
     
-    // Successful login
-    adminUser.resetLoginAttempts();
-    
-    // Update device fingerprint association
-    if (deviceFingerprint) {
-      if (!adminUser.securityProfile.primaryDeviceFingerprint) {
-        adminUser.securityProfile.primaryDeviceFingerprint = deviceFingerprint;
-      }
-      
-      // Add to associated devices if not already present
-      const existingDevice = adminUser.securityProfile.associatedDevices.find(
-        device => device.fingerprintId === deviceFingerprint
-      );
-      
-      if (!existingDevice) {
-        adminUser.securityProfile.associatedDevices.push({
-          fingerprintId: deviceFingerprint,
-          deviceType: req.userContext?.deviceFingerprint?.networkProfile?.deviceType || 'unknown',
-          lastUsed: new Date(),
-          trustLevel: 'trusted',
-          isPrimary: !adminUser.securityProfile.primaryDeviceFingerprint
-        });
-      } else {
-        existingDevice.lastUsed = new Date();
-      }
+    // Check email verification
+    const emailVerification = requireEmailVerificationForLogin(adminUser);
+    if (!emailVerification.verified) {
+      await logAuthAction(actor, 'admin_login', 'failure', { reason: 'Email not verified' }, 'medium');
+      return res.status(403).json({
+        success: false,
+        message: emailVerification.message,
+        emailVerificationRequired: true
+      });
     }
     
-    // Log security event
-    adminUser.addSecurityEvent(
-      'admin_login',
-      `Admin login from ${req.ip || 'unknown IP'}`,
-      'low'
-    );
+    // Reset login attempts
+    adminUser.resetLoginAttempts();
+    
+    // 2FA Check
+    if (adminUser.roleData.admin.twoFactorEnabled) {
+      const preAuthToken = TokenManager.generateAccessToken({
+        userId: adminUser._id,
+        preAuth: true,
+        purpose: '2fa'
+      });
+      
+      return res.status(200).json({
+        success: true,
+        twoFactorRequired: true,
+        preAuthToken,
+        message: 'Please enter your 2FA code'
+      });
+    }
+    
+    // Update device association
+    if (deviceFingerprint) {
+      adminUser.addDeviceAssociation(deviceFingerprint, 'admin-device', true);
+    }
+    
+    // Generate token pair
+    const { accessToken, refreshToken } = await TokenManager.generateTokenPair(adminUser);
+    
+    // Log successful login
+    await logAuthAction(actor, 'admin_login', 'success', {}, 'low', { 
+      id: adminUser._id, 
+      type: 'user', 
+      name: username 
+    });
     
     await adminUser.save();
-    
-    // Generate session token (in production, use proper JWT)
-    const sessionToken = `admin_${adminUser._id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    console.log(`✅ Admin login successful: ${username}`);
     
     res.json({
       success: true,
       message: 'Login successful',
-      token: sessionToken,
+      accessToken,
+      refreshToken,
       user: {
         id: adminUser._id,
         username: adminUser.roleData.admin.username,
         email: adminUser.roleData.admin.email,
         permissions: adminUser.roleData.admin.permissions,
         adminLevel: adminUser.roleData.admin.adminLevel,
-        lastLogin: adminUser.roleData.admin.lastLogin
-      },
-      securityContext: {
-        trustScore: adminUser.securityProfile.overallTrustScore,
-        riskLevel: adminUser.securityProfile.securityRiskLevel,
-        quarantined: adminUser.securityProfile.quarantineStatus
+        emailVerified: adminUser.roleData.admin.emailVerified,
+        twoFactorEnabled: adminUser.roleData.admin.twoFactorEnabled
       }
     });
     
   } catch (error) {
     console.error('❌ Admin login error:', error);
+    await logAuthAction(
+      { username: req.body.username, ipAddress: req.ip },
+      'admin_login',
+      'failure',
+      { reason: error.message },
+      'critical'
+    );
     res.status(500).json({
       success: false,
       message: 'Login failed',
@@ -146,21 +163,134 @@ router.post('/admin/login', async (req, res) => {
   }
 });
 
-// POST /api/auth/admin/logout - Admin logout
-router.post('/admin/logout', requireAdmin, async (req, res) => {
+// POST /api/auth/admin/2fa/verify-login - Enhanced 2FA verification
+router.post('/admin/2fa/verify-login', twoFactorLimiter, async (req, res) => {
   try {
-    const adminUser = req.userContext.user;
+    const { preAuthToken, twoFaCode } = req.body;
     
-    // Log security event
-    adminUser.addSecurityEvent(
-      'admin_logout',
-      `Admin logout from ${req.ip || 'unknown IP'}`,
+    const decoded = await TokenManager.verifyAccessToken(preAuthToken);
+    if (!decoded.preAuth) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid pre-auth token'
+      });
+    }
+    
+    const adminUser = await User.findById(decoded.userId);
+    if (!adminUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // TODO: Implement actual 2FA verification
+    const isValid = true; // Placeholder
+    
+    if (!isValid) {
+      await logAuthAction(
+        { userId: adminUser._id, userType: 'admin' },
+        'admin_login',
+        'failure',
+        { reason: 'Invalid 2FA code' },
+        'high'
+      );
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid 2FA code'
+      });
+    }
+    
+    // Generate full token pair
+    const { accessToken, refreshToken } = await TokenManager.generateTokenPair(adminUser);
+    
+    // Blacklist the pre-auth token
+    await TokenManager.blacklistToken(preAuthToken);
+    
+    await logAuthAction(
+      { userId: adminUser._id, userType: 'admin' },
+      'admin_login',
+      'success',
+      { via: '2FA' },
       'low'
     );
     
-    await adminUser.save();
+    res.json({
+      success: true,
+      message: 'Login successful',
+      accessToken,
+      refreshToken,
+      user: {
+        id: adminUser._id,
+        username: adminUser.roleData.admin.username,
+        email: adminUser.roleData.admin.email,
+        permissions: adminUser.roleData.admin.permissions,
+        adminLevel: adminUser.roleData.admin.adminLevel,
+        emailVerified: adminUser.roleData.admin.emailVerified,
+        twoFactorEnabled: adminUser.roleData.admin.twoFactorEnabled
+      }
+    });
     
-    console.log(`✅ Admin logout: ${adminUser.roleData.admin.username}`);
+  } catch (error) {
+    console.error('❌ 2FA verification error:', error);
+    res.status(401).json({
+      success: false,
+      message: 'Invalid or expired 2FA token'
+    });
+  }
+});
+
+// POST /api/auth/token/refresh - Token refresh endpoint
+router.post('/token/refresh', refreshLimiter, async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token required'
+      });
+    }
+    
+    const { accessToken } = await TokenManager.refreshAccessToken(refreshToken);
+    
+    res.json({
+      success: true,
+      accessToken
+    });
+    
+  } catch (error) {
+    console.error('❌ Token refresh error:', error);
+    res.status(401).json({
+      success: false,
+      message: 'Invalid or expired refresh token'
+    });
+  }
+});
+
+// POST /api/auth/admin/logout - Enhanced logout with token blacklisting
+router.post('/admin/logout', RoleMiddleware.apply(RoleMiddleware.adminOnly), async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    const accessToken = req.headers.authorization?.replace('Bearer ', '');
+    
+    // Blacklist both tokens
+    if (accessToken) {
+      await TokenManager.blacklistToken(accessToken);
+    }
+    if (refreshToken) {
+      await TokenManager.revokeRefreshToken(refreshToken);
+    }
+    
+    await logAuthAction(
+      { 
+        userId: req.userContext.user._id,
+        userType: 'admin',
+        ipAddress: req.ip
+      },
+      'admin_logout',
+      'success'
+    );
     
     res.json({
       success: true,
@@ -168,72 +298,276 @@ router.post('/admin/logout', requireAdmin, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('❌ Admin logout error:', error);
+    console.error('❌ Logout error:', error);
     res.status(500).json({
       success: false,
-      message: 'Logout failed',
-      error: error.message
+      message: 'Logout failed'
     });
   }
 });
 
-// GET /api/auth/admin/profile - Get admin profile
-router.get('/admin/profile', requireAdmin, async (req, res) => {
+// POST /api/auth/admin/unlock/:userId - Admin account unlock mechanism
+router.post('/admin/unlock/:userId', RoleMiddleware.apply(RoleMiddleware.superAdminOnly), async (req, res) => {
   try {
-    const adminUser = req.userContext.user;
+    const { userId } = req.params;
+    const { reason } = req.body;
+    const actingAdmin = req.userContext.user;
+    
+    const targetUser = await User.findById(userId);
+    if (!targetUser || targetUser.userType !== 'admin') {
+      return res.status(404).json({
+        success: false,
+        message: 'Admin user not found'
+      });
+    }
+    
+    // Unlock the account
+    targetUser.roleData.admin.accountLocked = false;
+    targetUser.roleData.admin.lockUntil = null;
+    targetUser.roleData.admin.loginAttempts = 0;
+    
+    // Log security event
+    targetUser.addSecurityEvent(
+      'account_unlocked',
+      `Account unlocked by ${actingAdmin.roleData.admin.username}: ${reason}`,
+      'medium'
+    );
+    
+    await targetUser.save();
+    
+    // Send email notification
+    await EmailService.sendAccountUnlockedEmail(
+      targetUser.roleData.admin.email,
+      targetUser.roleData.admin.username
+    );
+    
+    await logAuthAction(
+      { 
+        userId: actingAdmin._id,
+        userType: 'admin',
+        username: actingAdmin.roleData.admin.username
+      },
+      'admin_account_unlock',
+      'success',
+      { 
+        targetUserId: userId,
+        reason: reason || 'Manual unlock'
+      },
+      'high',
+      { id: userId, type: 'user', name: targetUser.roleData.admin.username }
+    );
+    
+    console.log(`🔓 Account unlocked: ${targetUser.roleData.admin.username} by ${actingAdmin.roleData.admin.username}`);
     
     res.json({
       success: true,
+      message: 'Account unlocked successfully',
       user: {
-        id: adminUser._id,
-        username: adminUser.roleData.admin.username,
-        email: adminUser.roleData.admin.email,
-        permissions: adminUser.roleData.admin.permissions,
-        adminLevel: adminUser.roleData.admin.adminLevel,
-        lastLogin: adminUser.roleData.admin.lastLogin,
-        createdAt: adminUser.createdAt
-      },
-      securityContext: {
-        trustScore: adminUser.securityProfile.overallTrustScore,
-        riskLevel: adminUser.securityProfile.securityRiskLevel,
-        quarantined: adminUser.securityProfile.quarantineStatus,
-        associatedDevices: adminUser.securityProfile.associatedDevices.length,
-        lastSecurityCheck: adminUser.securityProfile.lastSecurityCheck
-      },
-      activityProfile: {
-        totalSessions: adminUser.activityProfile.totalSessions,
-        totalActiveTime: adminUser.activityProfile.totalActiveTime,
-        featureUsage: adminUser.activityProfile.featureUsage
+        id: targetUser._id,
+        username: targetUser.roleData.admin.username,
+        accountLocked: false
       }
     });
     
   } catch (error) {
-    console.error('❌ Get admin profile error:', error);
+    console.error('❌ Account unlock error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get profile',
-      error: error.message
+      message: 'Failed to unlock account'
     });
   }
 });
 
-// === USER TYPE DETECTION & SWITCHING ===
+// POST /api/auth/request-password-reset - Enhanced password reset with rate limiting
+router.post('/request-password-reset', passwordResetLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+    const actor = { email, ipAddress: req.ip };
+    
+    const user = await User.findOne({ 
+      'roleData.admin.email': email, 
+      userType: 'admin' 
+    });
+    
+    if (!user) {
+      await logAuthAction(actor, 'password_reset_request', 'failure', { reason: 'User not found' }, 'low');
+      // Always return success to prevent email enumeration
+      return res.json({
+        success: true,
+        message: 'If a user with that email exists, a password reset link has been sent.'
+      });
+    }
+    
+    // Generate secure reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.roleData.admin.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    user.roleData.admin.passwordResetExpires = Date.now() + 3600000; // 1 hour
+    
+    await user.save();
+    
+    // Send reset email
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    await EmailService.sendPasswordResetEmail(email, resetLink);
+    
+    await logAuthAction(
+      { userId: user._id, userType: user.userType },
+      'password_reset_request',
+      'success',
+      {},
+      'medium'
+    );
+    
+    res.json({
+      success: true,
+      message: 'If a user with that email exists, a password reset link has been sent.'
+    });
+    
+  } catch (error) {
+    console.error('❌ Password reset request error:', error);
+    await logAuthAction(
+      { email: req.body.email, ipAddress: req.ip },
+      'password_reset_request',
+      'failure',
+      { reason: error.message },
+      'critical'
+    );
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred'
+    });
+  }
+});
 
-// GET /api/auth/user/context - Get current user context
+// POST /api/auth/reset-password - Password reset completion
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    
+    const user = await User.findOne({
+      'roleData.admin.passwordResetToken': hashedToken,
+      'roleData.admin.passwordResetExpires': { $gt: Date.now() }
+    });
+    
+    if (!user) {
+      await logAuthAction(
+        { ipAddress: req.ip },
+        'password_reset_complete',
+        'failure',
+        { reason: 'Invalid or expired token' },
+        'medium'
+      );
+      return res.status(400).json({
+        success: false,
+        message: 'Password reset token is invalid or has expired'
+      });
+    }
+    
+    // Update password and clear reset tokens
+    await user.setPassword(password);
+    user.roleData.admin.passwordResetToken = undefined;
+    user.roleData.admin.passwordResetExpires = undefined;
+    user.roleData.admin.loginAttempts = 0;
+    user.roleData.admin.accountLocked = false;
+    
+    // Revoke all existing tokens for security
+    await TokenManager.revokeAllUserTokens(user._id);
+    
+    await user.save();
+    
+    await logAuthAction(
+      { userId: user._id, userType: user.userType },
+      'password_reset_complete',
+      'success',
+      {},
+      'high'
+    );
+    
+    res.json({
+      success: true,
+      message: 'Password has been successfully reset. Please log in with your new password.'
+    });
+    
+  } catch (error) {
+    console.error('❌ Password reset error:', error);
+    await logAuthAction(
+      { ipAddress: req.ip },
+      'password_reset_complete',
+      'failure',
+      { reason: error.message },
+      'critical'
+    );
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred'
+    });
+  }
+});
+
+// GET /api/auth/verify-email/:token - Email verification
+router.get('/verify-email/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    
+    const user = await User.findOne({
+      'roleData.admin.emailVerificationToken': hashedToken
+    });
+    
+    if (!user) {
+      await logAuthAction(
+        { ipAddress: req.ip },
+        'email_verification_complete',
+        'failure',
+        { reason: 'Invalid token' },
+        'medium'
+      );
+      return res.status(400).send('<h1>Email verification failed. Invalid or expired link.</h1>');
+    }
+    
+    // Mark email as verified
+    user.roleData.admin.emailVerified = true;
+    user.roleData.admin.emailVerificationToken = undefined;
+    await user.save();
+    
+    await logAuthAction(
+      { userId: user._id, userType: user.userType },
+      'email_verification_complete',
+      'success',
+      {},
+      'medium'
+    );
+    
+    res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
+    
+  } catch (error) {
+    console.error('❌ Email verification error:', error);
+    res.status(500).send('<h1>An error occurred during email verification.</h1>');
+  }
+});
+
+// GET /api/auth/user/context - Enhanced user context with verification status
 router.get('/user/context', async (req, res) => {
   try {
     const { userContext } = req;
     
+    // Enhanced context with verification status
+    const enhancedContext = {
+      userType: userContext.userType,
+      userId: userContext.user?.userId,
+      permissions: userContext.permissions,
+      securityContext: userContext.securityContext,
+      deviceFingerprint: userContext.deviceFingerprint?.fingerprintId,
+      temporary: userContext.user?.temporary || false,
+      // Add verification status
+      emailVerified: userContext.user?.roleData?.admin?.emailVerified ?? true,
+      accountLocked: userContext.user?.roleData?.admin?.accountLocked ?? false,
+      twoFactorEnabled: userContext.user?.roleData?.admin?.twoFactorEnabled ?? false
+    };
+    
     res.json({
       success: true,
-      userContext: {
-        userType: userContext.userType,
-        userId: userContext.user?.userId,
-        permissions: userContext.permissions,
-        securityContext: userContext.securityContext,
-        deviceFingerprint: userContext.deviceFingerprint?.fingerprintId,
-        temporary: userContext.user?.temporary || false
-      },
+      userContext: enhancedContext,
       user: userContext.user?.temporary ? null : {
         id: userContext.user?._id,
         activityProfile: userContext.user?.activityProfile,
@@ -245,151 +579,59 @@ router.get('/user/context', async (req, res) => {
     console.error('❌ Get user context error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get user context',
-      error: error.message
+      message: 'Failed to get user context'
     });
   }
 });
 
-// POST /api/auth/user/update-preferences - Update user preferences
-router.post('/user/update-preferences', async (req, res) => {
+// GET /api/auth/admin/sessions - Get user's active sessions
+router.get('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly), async (req, res) => {
   try {
-    const { userContext } = req;
-    const { preferences } = req.body;
-    
-    if (userContext.user?.temporary) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot update preferences for temporary users'
-      });
-    }
-    
-    const user = await User.findById(userContext.user._id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-    
-    // Update preferences
-    if (preferences.language) user.preferences.language = preferences.language;
-    if (preferences.theme) user.preferences.theme = preferences.theme;
-    if (preferences.notifications) {
-      Object.assign(user.preferences.notifications, preferences.notifications);
-    }
-    if (preferences.mapSettings) {
-      Object.assign(user.preferences.mapSettings, preferences.mapSettings);
-    }
-    if (preferences.femaleSafetyMode) {
-      Object.assign(user.preferences.femaleSafetyMode, preferences.femaleSafetyMode);
-    }
-    
-    await user.save();
-    
-    console.log(`✅ Updated preferences for user: ${user.userId}`);
+    const userId = req.userContext.user._id;
+    const sessions = await TokenManager.getUserRefreshTokens(userId);
     
     res.json({
       success: true,
-      message: 'Preferences updated successfully',
-      preferences: user.preferences
+      sessions: sessions.map(session => ({
+        tokenId: session.tokenId,
+        createdAt: session.createdAt,
+        isCurrentSession: false // Could be enhanced to detect current session
+      }))
     });
     
   } catch (error) {
-    console.error('❌ Update preferences error:', error);
+    console.error('❌ Get sessions error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update preferences',
-      error: error.message
+      message: 'Failed to get active sessions'
     });
   }
 });
 
-// === FUTURE: POLICE/RESEARCHER AUTHENTICATION ===
-
-// POST /api/auth/police/register - Police officer registration (Future)
-router.post('/police/register', async (req, res) => {
-  // Future implementation for police officer registration
-  res.status(501).json({
-    success: false,
-    message: 'Police registration not yet implemented',
-    plannedFeatures: [
-      'Badge number verification',
-      'Department authentication',
-      'Document upload',
-      'Admin approval workflow'
-    ]
-  });
-});
-
-// POST /api/auth/researcher/register - Researcher registration (Future)
-router.post('/researcher/register', async (req, res) => {
-  // Future implementation for researcher registration
-  res.status(501).json({
-    success: false,
-    message: 'Researcher registration not yet implemented',
-    plannedFeatures: [
-      'Institution verification',
-      'Research proposal review',
-      'Ethics approval',
-      'Data usage agreement'
-    ]
-  });
-});
-
-// === SECURITY & MONITORING ===
-
-// GET /api/auth/security/insights - Security insights for admins
-router.get('/security/insights', requireAdmin, requirePermission('view_security_dashboard'), async (req, res) => {
+// DELETE /api/auth/admin/sessions - Revoke all sessions
+router.delete('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly), async (req, res) => {
   try {
-    // Get security insights
-    const userInsights = await User.getSecurityInsights();
-    const deviceInsights = await DeviceFingerprint.find({
-      'securityProfile.riskLevel': { $in: ['high', 'critical'] }
-    }).limit(10);
+    const userId = req.userContext.user._id;
+    await TokenManager.revokeAllUserTokens(userId);
     
-    // Get recent security events
-    const recentEvents = await User.find({
-      'securityProfile.securityEvents': { $exists: true, $ne: [] }
-    })
-    .select('securityProfile.securityEvents userId userType')
-    .limit(20);
-    
-    const allEvents = [];
-    recentEvents.forEach(user => {
-      user.securityProfile.securityEvents.forEach(event => {
-        allEvents.push({
-          ...event.toObject(),
-          userId: user.userId,
-          userType: user.userType
-        });
-      });
-    });
-    
-    // Sort by timestamp
-    allEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    await logAuthAction(
+      { userId, userType: 'admin' },
+      'admin_sessions_revoked',
+      'success',
+      { reason: 'User requested session revocation' },
+      'medium'
+    );
     
     res.json({
       success: true,
-      insights: {
-        userTypeDistribution: userInsights,
-        highRiskDevices: deviceInsights.length,
-        recentSecurityEvents: allEvents.slice(0, 20),
-        summary: {
-          totalUsers: await User.countDocuments(),
-          totalDevices: await DeviceFingerprint.countDocuments(),
-          quarantinedUsers: await User.countDocuments({ 'securityProfile.quarantineStatus': true }),
-          quarantinedDevices: await DeviceFingerprint.countDocuments({ 'securityProfile.quarantineStatus': true })
-        }
-      }
+      message: 'All sessions revoked successfully'
     });
     
   } catch (error) {
-    console.error('❌ Security insights error:', error);
+    console.error('❌ Revoke sessions error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get security insights',
-      error: error.message
+      message: 'Failed to revoke sessions'
     });
   }
 });

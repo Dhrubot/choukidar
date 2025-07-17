@@ -4,6 +4,7 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import apiService from '../services/api';
+import { useAuth } from './AuthContext'; // Import useAuth from AuthContext
 
 // Device fingerprinting service
 const generateDeviceFingerprint = () => {
@@ -51,7 +52,7 @@ const initialState = {
   userId: null,
   deviceFingerprint: null,
   
-  // Authentication state
+  // Authentication state (general, will be overridden by AuthContext for admin)
   isAuthenticated: false,
   authToken: null,
   
@@ -99,7 +100,9 @@ const ActionTypes = {
   UPDATE_SECURITY_CONTEXT: 'UPDATE_SECURITY_CONTEXT',
   UPDATE_ACTIVITY: 'UPDATE_ACTIVITY',
   LOGOUT: 'LOGOUT',
-  RESET_STATE: 'RESET_STATE'
+  RESET_STATE: 'RESET_STATE',
+  // New action type to sync with AuthContext for authenticated users
+  SYNC_AUTHENTICATED_USER: 'SYNC_AUTHENTICATED_USER',
 };
 
 // Reducer
@@ -185,6 +188,21 @@ const userTypeReducer = (state, action) => {
         ...initialState,
         loading: false
       };
+
+    // New case to sync authenticated user details from AuthContext
+    case ActionTypes.SYNC_AUTHENTICATED_USER:
+      return {
+        ...state,
+        isAuthenticated: action.payload.isAuthenticated,
+        userType: action.payload.userType,
+        user: action.payload.user,
+        permissions: action.payload.permissions,
+        securityContext: {
+          ...state.securityContext, // Keep existing device-related security context
+          ...action.payload.securityContext // Override with user-specific security context
+        },
+        loading: false, // Assume loading is done once authenticated user is synced
+      };
       
     default:
       return state;
@@ -197,6 +215,8 @@ const UserTypeContext = createContext();
 // Provider component
 export const UserTypeProvider = ({ children }) => {
   const [state, dispatch] = useReducer(userTypeReducer, initialState);
+  // Get authentication state from AuthContext
+  const { isAuthenticated: authContextIsAuthenticated, adminUser, adminPermissions, adminSecurityContext, isLoading: authLoading } = useAuth();
   
   // Initialize device fingerprint and user context
   const initializeUserContext = useCallback(async () => {
@@ -260,8 +280,12 @@ export const UserTypeProvider = ({ children }) => {
     }
   }, []);
   
-  // Admin login
+  // Admin login (this function is primarily for AuthContext to call,
+  // UserTypeContext will sync from AuthContext's state)
   const loginAdmin = useCallback(async (credentials) => {
+    // This function is less relevant here now that AuthContext is the primary login handler
+    // We'll keep it for compatibility but its logic should be minimal or removed if AuthContext handles it fully.
+    console.warn("UserTypeContext's loginAdmin called. Consider using AuthContext's loginAdmin directly.");
     try {
       dispatch({ type: ActionTypes.SET_LOADING, payload: true });
       
@@ -271,9 +295,7 @@ export const UserTypeProvider = ({ children }) => {
       });
       
       if (response.success) {
-        // Store auth token
         localStorage.setItem('safestreets_admin_token', response.token);
-        
         dispatch({
           type: ActionTypes.SET_AUTHENTICATION,
           payload: {
@@ -283,16 +305,14 @@ export const UserTypeProvider = ({ children }) => {
             permissions: response.user.permissions
           }
         });
-        
-        console.log('✅ Admin login successful:', response.user.username);
+        console.log('✅ Admin login successful (via UserTypeContext):', response.user.username);
         return { success: true };
-        
       } else {
         throw new Error(response.message || 'Login failed');
       }
       
     } catch (error) {
-      console.error('❌ Admin login failed:', error);
+      console.error('❌ Admin login failed (via UserTypeContext):', error);
       dispatch({
         type: ActionTypes.SET_ERROR,
         payload: error.message || 'Login failed'
@@ -409,14 +429,40 @@ export const UserTypeProvider = ({ children }) => {
     initializeUserContext();
   }, [initializeUserContext]);
   
-  // Check for stored admin token on mount
+  // --- NEW: Sync UserTypeContext with AuthContext's authenticated state ---
+  useEffect(() => {
+    // Only sync if AuthContext indicates authentication and UserTypeContext is not already authenticated as the same user
+    if (authContextIsAuthenticated && adminUser && state.userType !== 'admin') {
+      console.log('🔄 UserTypeContext: Syncing with AuthContext for authenticated admin.');
+      dispatch({
+        type: ActionTypes.SYNC_AUTHENTICATED_USER,
+        payload: {
+          isAuthenticated: authContextIsAuthenticated,
+          userType: 'admin', // Explicitly set to admin
+          user: adminUser,
+          permissions: adminPermissions,
+          securityContext: adminSecurityContext // Use security context from AuthContext
+        }
+      });
+    } else if (!authContextIsAuthenticated && state.userType !== 'anonymous' && !authLoading) {
+      // If AuthContext is no longer authenticated, and UserTypeContext is not anonymous,
+      // and AuthContext has finished loading, reset UserTypeContext to anonymous.
+      // This handles logout scenarios.
+      console.log('🔄 UserTypeContext: AuthContext indicates logout. Resetting to anonymous.');
+      // Re-initialize to get a fresh anonymous context based on device fingerprint
+      initializeUserContext();
+    }
+  }, [authContextIsAuthenticated, adminUser, adminPermissions, adminSecurityContext, authLoading, state.userType, initializeUserContext]); // Add initializeUserContext to dependencies
+
+  // Check for stored admin token on mount (This is now less critical as AuthContext handles primary auth check)
   useEffect(() => {
     const storedToken = localStorage.getItem('safestreets_admin_token');
-    if (storedToken && !state.isAuthenticated) {
+    if (storedToken && !state.isAuthenticated && !authContextIsAuthenticated) {
       // Verify token with backend
-      apiService.getAdminProfile()
+      apiService.getAdminProfile() // This call is also made by AuthContext, might be redundant here
         .then(response => {
           if (response.success) {
+            // This part might be removed if AuthContext is the sole source of truth for admin auth
             dispatch({
               type: ActionTypes.SET_AUTHENTICATION,
               payload: {
@@ -434,8 +480,8 @@ export const UserTypeProvider = ({ children }) => {
           localStorage.removeItem('safestreets_admin_token');
         });
     }
-  }, [state.isAuthenticated]);
-  
+  }, [state.isAuthenticated, authContextIsAuthenticated]); // Keep authContextIsAuthenticated here
+
   // Load saved preferences for anonymous users
   useEffect(() => {
     if (state.userType === 'anonymous' && !state.loading) {
@@ -474,7 +520,7 @@ export const UserTypeProvider = ({ children }) => {
     ...state,
     
     // Actions
-    loginAdmin,
+    loginAdmin, // This will be less used directly now
     logoutAdmin,
     updatePreferences,
     updateActivity,
@@ -517,7 +563,7 @@ export const useSecurityContext = () => {
 
 export const useAdminAuth = () => {
   const { 
-    userType, 
+    userType, // This will now correctly reflect 'admin' from SYNC_AUTHENTICATED_USER
     isAuthenticated, 
     user, 
     loginAdmin, 

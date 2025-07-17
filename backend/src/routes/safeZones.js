@@ -2,6 +2,36 @@
 const express = require('express');
 const router = express.Router();
 const SafeZone = require('../models/SafeZone');
+const AuditLog = require('../models/AuditLog'); // Import AuditLog for admin action logging
+const { requireAdmin, requirePermission } = require('../middleware/roleBasedAccess'); // Corrected import
+const { userTypeDetection } = require('../middleware/userTypeDetection'); // Import userTypeDetection
+
+// Apply user type detection to all routes in this router
+router.use(userTypeDetection);
+
+/**
+ * Helper function to create an audit log entry for admin actions on safe zones.
+ */
+const logAdminAction = async (req, actionType, details = {}, severity = 'medium', target = {}) => {
+  try {
+    await AuditLog.create({
+      actor: {
+        userId: req.userContext.user._id,
+        userType: 'admin',
+        username: req.userContext.user.roleData.admin.username,
+        deviceFingerprint: req.userContext.deviceFingerprint?.fingerprintId,
+        ipAddress: req.ip
+      },
+      actionType,
+      details,
+      outcome: 'success',
+      severity,
+      target
+    });
+  } catch (error) {
+    console.error(`❌ Audit log failed for action ${actionType}:`, error);
+  }
+};
 
 // GET public safe zones (for map display)
 router.get('/', async (req, res) => {
@@ -329,7 +359,10 @@ router.get('/analytics/public', async (req, res) => {
 // ========== ADMIN ENDPOINTS ==========
 
 // GET all safe zones (admin only)
-router.get('/admin/all', async (req, res) => {
+router.get('/admin/all', 
+  requireAdmin, 
+  requirePermission('view_safe_zones'),
+  async (req, res) => {
   try {
     const {
       status,
@@ -383,19 +416,31 @@ router.get('/admin/all', async (req, res) => {
 });
 
 // POST create new safe zone (admin only)
-router.post('/admin/create', async (req, res) => {
+router.post('/admin/create', 
+  requireAdmin, 
+  requirePermission('create_safe_zones'),
+  async (req, res) => {
   try {
     const safeZoneData = {
       ...req.body,
       createdBy: 'admin',
       source: 'manual_entry',
-      verifiedBy: 'admin',
+      verifiedBy: req.userContext.user.roleData.admin.username,
       verifiedAt: new Date(),
-      verificationStatus: 'verified'
+      verificationStatus: 'admin_verified'
     };
 
     const safeZone = new SafeZone(safeZoneData);
     await safeZone.save();
+
+    // --- Audit Log ---
+    await logAdminAction(
+        req,
+        'safezone_create',
+        { name: safeZone.name, zoneType: safeZone.zoneType },
+        'high',
+        { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
+    );
 
     console.log(`✅ Admin created safe zone: ${safeZone.name} (${safeZone.zoneType})`);
 
@@ -416,7 +461,10 @@ router.post('/admin/create', async (req, res) => {
 });
 
 // PUT update safe zone (admin only)
-router.put('/admin/:id', async (req, res) => {
+router.put('/admin/:id', 
+  requireAdmin, 
+  requirePermission('edit_safe_zones'),
+  async (req, res) => {
   try {
     const safeZone = await SafeZone.findByIdAndUpdate(
       req.params.id,
@@ -433,6 +481,15 @@ router.put('/admin/:id', async (req, res) => {
         message: 'Safe zone not found'
       });
     }
+
+    // --- Audit Log ---
+    await logAdminAction(
+        req,
+        'safezone_update',
+        { updatedFields: Object.keys(req.body) },
+        'medium',
+        { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
+    );
 
     console.log(`✅ Admin updated safe zone: ${safeZone.name}`);
 
@@ -453,7 +510,10 @@ router.put('/admin/:id', async (req, res) => {
 });
 
 // DELETE safe zone (admin only)
-router.delete('/admin/:id', async (req, res) => {
+router.delete('/admin/:id', 
+  requireAdmin, 
+  requirePermission('delete_safe_zones'),
+  async (req, res) => {
   try {
     const safeZone = await SafeZone.findByIdAndDelete(req.params.id);
 
@@ -463,6 +523,15 @@ router.delete('/admin/:id', async (req, res) => {
         message: 'Safe zone not found'
       });
     }
+
+    // --- Audit Log ---
+    await logAdminAction(
+        req,
+        'safezone_delete',
+        {},
+        'high',
+        { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
+    );
 
     console.log(`✅ Admin deleted safe zone: ${safeZone.name}`);
 
@@ -482,7 +551,10 @@ router.delete('/admin/:id', async (req, res) => {
 });
 
 // PUT bulk update safe zone statuses (admin only)
-router.put('/admin/bulk/status', async (req, res) => {
+router.put('/admin/bulk/status', 
+  requireAdmin, 
+  requirePermission('manage_safe_zone_categories'),
+  async (req, res) => {
   try {
     const { safeZoneIds, status } = req.body;
 
@@ -499,6 +571,14 @@ router.put('/admin/bulk/status', async (req, res) => {
         status,
         lastSafetyUpdate: new Date()
       }
+    );
+
+    // --- Audit Log ---
+    await logAdminAction(
+        req,
+        'safezone_bulk_update',
+        { safeZoneIds, status, count: result.modifiedCount },
+        'high'
     );
 
     console.log(`✅ Admin bulk updated ${result.modifiedCount} safe zones to status: ${status}`);
@@ -520,7 +600,10 @@ router.put('/admin/bulk/status', async (req, res) => {
 });
 
 // GET admin analytics and statistics
-router.get('/admin/analytics', async (req, res) => {
+router.get('/admin/analytics', 
+  requireAdmin, 
+  requirePermission('view_admin_analytics'),
+  async (req, res) => {
   try {
     // Overall statistics
     const overallStats = await SafeZone.aggregate([
@@ -641,7 +724,10 @@ router.get('/admin/analytics', async (req, res) => {
 });
 
 // POST import safe zones from data (admin only)
-router.post('/admin/import', async (req, res) => {
+router.post('/admin/import', 
+  requireAdmin, 
+  requirePermission('system_configuration'),
+  async (req, res) => {
   try {
     const { safeZones, source = 'import', overwrite = false } = req.body;
 
@@ -651,6 +737,14 @@ router.post('/admin/import', async (req, res) => {
         message: 'Invalid data format. Expected array of safe zones.'
       });
     }
+
+    // --- Audit Log for the import action itself ---
+    await logAdminAction(
+        req,
+        'data_import',
+        { source: 'safeZones', count: safeZones.length, overwrite },
+        'high'
+    );
 
     const results = {
       created: 0,
@@ -718,7 +812,10 @@ router.post('/admin/import', async (req, res) => {
 });
 
 // GET export safe zones data (admin only)
-router.get('/admin/export', async (req, res) => {
+router.get('/admin/export', 
+  requireAdmin, 
+  requirePermission('export_data'),
+  async (req, res) => {
   try {
     const { format = 'json', status = 'active' } = req.query;
 
@@ -730,6 +827,14 @@ router.get('/admin/export', async (req, res) => {
     const safeZones = await SafeZone.find(query)
       .sort({ createdAt: -1 })
       .lean();
+      
+    // --- Audit Log ---
+    await logAdminAction(
+        req,
+        'data_export',
+        { source: 'safeZones', format, count: safeZones.length },
+        'high'
+    );
 
     if (format === 'geojson') {
       const geoJsonFeatures = safeZones.map(zone => ({

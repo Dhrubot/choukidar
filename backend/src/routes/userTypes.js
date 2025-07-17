@@ -6,16 +6,36 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const DeviceFingerprint = require('../models/DeviceFingerprint');
-const userTypeDetection = require('../middleware/userTypeDetection');
-const { 
-  requireAdmin, 
-  requirePermission, 
-  getUserPermissions, 
-  requireMinimumTrust 
-} = require('../middleware/roleBasedAccess');
+const AuditLog = require('../models/AuditLog'); // For logging admin actions
+const { userTypeDetection } = require('../middleware/userTypeDetection'); 
+const { requireAdmin, requirePermission, requireMinimumTrust, getUserPermissions } = require('../middleware/roleBasedAccess');
 
 // Apply user type detection to all routes
 router.use(userTypeDetection);
+
+/**
+ * Helper function to create an audit log entry for admin actions on users.
+ */
+const logAdminAction = async (req, actionType, details = {}, severity = 'medium', target = {}) => {
+  try {
+    await AuditLog.create({
+      actor: {
+        userId: req.userContext.user._id,
+        userType: 'admin',
+        username: req.userContext.user.roleData.admin.username,
+        deviceFingerprint: req.userContext.deviceFingerprint?.fingerprintId,
+        ipAddress: req.ip
+      },
+      actionType,
+      details,
+      outcome: 'success',
+      severity,
+      target
+    });
+  } catch (error) {
+    console.error(`❌ Audit log failed for action ${actionType}:`, error);
+  }
+};
 
 // === ADMIN USER MANAGEMENT ===
 
@@ -31,7 +51,7 @@ router.get('/admin/users',
         quarantined = 'all',
         page = 1,
         limit = 50,
-        sortBy = 'lastSeen',
+        sortBy = 'activityProfile.lastSeen',
         sortOrder = 'desc'
       } = req.query;
 
@@ -56,7 +76,7 @@ router.get('/admin/users',
 
       // Execute query with pagination
       const users = await User.find(query)
-        .select('-roleData.admin.passwordHash') // Exclude password hash
+        .select('-roleData.admin.passwordHash -roleData.admin.twoFactorSecret') // Exclude sensitive fields
         .sort(sort)
         .limit(limit * 1)
         .skip((page - 1) * limit)
@@ -100,7 +120,7 @@ router.get('/admin/user/:id',
   async (req, res) => {
     try {
       const user = await User.findById(req.params.id)
-        .select('-roleData.admin.passwordHash')
+        .select('-roleData.admin.passwordHash -roleData.admin.twoFactorSecret')
         .lean();
 
       if (!user) {
@@ -180,6 +200,15 @@ router.put('/admin/user/:id/quarantine',
       }
 
       await user.save();
+
+      // --- Audit Log ---
+      await logAdminAction(
+        req,
+        'user_quarantine_status_change',
+        { status: quarantine ? 'quarantined' : 'unquarantined', reason, duration },
+        'high',
+        { id: user._id, type: 'User', name: user.userId }
+      );
 
       console.log(`✅ User ${user.userId} ${quarantine ? 'quarantined' : 'unquarantined'} by admin`);
 
@@ -269,9 +298,18 @@ router.post('/admin/create',
 
       await newAdmin.save();
 
+      // --- Audit Log ---
+      await logAdminAction(
+        req,
+        'user_role_change',
+        { action: 'create_admin', username, email, permissions, adminLevel },
+        'high',
+        { id: newAdmin._id, type: 'User', name: newAdmin.roleData.admin.username }
+      );
+
       console.log(`✅ New admin created: ${username} by ${req.userContext.user.roleData.admin.username}`);
 
-      res.json({
+      res.status(201).json({
         success: true,
         message: 'Admin user created successfully',
         admin: {
@@ -316,12 +354,19 @@ router.put('/admin/:id/permissions',
         });
       }
 
+      // Track changes for audit log
+      const changes = {};
+      
       // Update permissions
       if (permissions) {
+        changes.oldPermissions = adminUser.roleData.admin.permissions;
+        changes.newPermissions = permissions;
         adminUser.roleData.admin.permissions = permissions;
       }
 
       if (adminLevel !== undefined) {
+        changes.oldAdminLevel = adminUser.roleData.admin.adminLevel;
+        changes.newAdminLevel = adminLevel;
         adminUser.roleData.admin.adminLevel = adminLevel;
       }
 
@@ -333,6 +378,15 @@ router.put('/admin/:id/permissions',
       );
 
       await adminUser.save();
+
+      // --- Audit Log ---
+      await logAdminAction(
+        req,
+        'user_permission_change',
+        changes,
+        'high',
+        { id: adminUser._id, type: 'User', name: adminUser.roleData.admin.username }
+      );
 
       console.log(`✅ Admin permissions updated: ${adminUser.roleData.admin.username}`);
 
@@ -479,10 +533,7 @@ router.get('/admin/devices',
       // Find associated users for each device
       const devicesWithUsers = await Promise.all(devices.map(async (device) => {
         const user = await User.findOne({
-          $or: [
-            { 'securityProfile.primaryDeviceFingerprint': device.fingerprintId },
-            { 'anonymousProfile.deviceFingerprint': device.fingerprintId }
-          ]
+          _id: device.userId
         }).select('userId userType').lean();
 
         return {
@@ -536,6 +587,8 @@ router.put('/admin/device/:fingerprintId/quarantine',
       if (quarantine) {
         device.securityProfile.quarantineUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
         device.securityProfile.quarantineReason = reason || 'Admin quarantine';
+        // Log quarantine event to device history
+        device.addQuarantineEvent(reason || 'Admin quarantine', 'moderator');
       } else {
         device.securityProfile.quarantineUntil = null;
         device.securityProfile.quarantineReason = null;
@@ -544,13 +597,8 @@ router.put('/admin/device/:fingerprintId/quarantine',
       await device.save();
 
       // Also quarantine associated user
-      const user = await User.findOne({
-        $or: [
-          { 'securityProfile.primaryDeviceFingerprint': device.fingerprintId },
-          { 'anonymousProfile.deviceFingerprint': device.fingerprintId }
-        ]
-      });
-
+      const user = await User.findById(device.userId);
+      
       if (user) {
         user.securityProfile.quarantineStatus = quarantine;
         if (quarantine) {
@@ -559,9 +607,24 @@ router.put('/admin/device/:fingerprintId/quarantine',
             `Device quarantined by admin: ${reason}`,
             'high'
           );
+        } else {
+          user.addSecurityEvent(
+            'device_unquarantine',
+            'Device released from quarantine by admin',
+            'low'
+          );
         }
         await user.save();
       }
+
+      // --- Audit Log ---
+      await logAdminAction(
+        req,
+        'user_quarantine_status_change',
+        { status: quarantine ? 'quarantined' : 'unquarantined', reason, byDevice: true },
+        'high',
+        { id: device.fingerprintId, type: 'DeviceFingerprint' }
+      );
 
       console.log(`✅ Device ${device.fingerprintId} ${quarantine ? 'quarantined' : 'unquarantined'}`);
 
@@ -603,6 +666,14 @@ router.post('/admin/bulk/quarantine',
         });
       }
 
+      // --- Audit Log for the bulk action ---
+      await logAdminAction(
+        req,
+        'user_quarantine_status_change',
+        { action: 'bulk', status: quarantine ? 'quarantined' : 'unquarantined', count: userIds.length, reason },
+        'critical' // Bulk operations are critical severity
+      );
+
       const updateData = {
         'securityProfile.quarantineStatus': quarantine
       };
@@ -617,8 +688,29 @@ router.post('/admin/bulk/quarantine',
 
       const result = await User.updateMany(
         { _id: { $in: userIds } },
-        updateData
+        { $set: updateData }
       );
+
+      // Log security events for each affected user
+      for (const userId of userIds) {
+        const user = await User.findById(userId);
+        if (user) {
+          if (quarantine) {
+            user.addSecurityEvent(
+              'admin_bulk_quarantine',
+              `Bulk quarantined by admin: ${reason}`,
+              'high'
+            );
+          } else {
+            user.addSecurityEvent(
+              'admin_bulk_unquarantine',
+              'Bulk released from quarantine by admin',
+              'low'
+            );
+          }
+          await user.save();
+        }
+      }
 
       console.log(`✅ Bulk ${quarantine ? 'quarantine' : 'unquarantine'} operation: ${result.modifiedCount} users affected`);
 

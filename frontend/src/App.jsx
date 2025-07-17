@@ -11,14 +11,16 @@ import MapPage from './pages/MapPage'
 import ReportPage from './pages/ReportPage'
 import AdminPage from './pages/AdminPage'
 import LoginPage from './pages/LoginPage'
+import InviteRegisterPage from './pages/InviteRegisterPage'
 import Header from './components/Common/Header'
 import Footer from './components/Common/Footer'
 import ProtectedRoute, { AdminProtectedRoute } from './components/Layout/ProtectedRoute'
 
 function App() {
   return (
-    <UserTypeProvider>
-      <AuthProvider>
+    // Corrected nesting order: AuthProvider wraps UserTypeProvider
+    <AuthProvider>
+      <UserTypeProvider>
         <Router>
           <div className="min-h-screen bg-neutral-50 flex flex-col">
             <Header />
@@ -28,23 +30,24 @@ function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/map" element={<MapPage />} />
                 <Route path="/report" element={<ReportPage />} />
-                
+                {/* Invite-based Registration Route (Publicly accessible with token) */}
+                <Route path="/register" element={<InviteRegisterPage />} />
+
                 {/* Admin Authentication Route */}
                 <Route path="/admin/login" element={<LoginPage />} />
-                
+
                 {/* Protected Admin Route */}
-                <Route 
-                  path="/admin" 
+                <Route
+                  path="/admin"
                   element={
                     <AdminProtectedRoute>
                       <AdminPage />
                     </AdminProtectedRoute>
-                  } 
+                  }
                 />
-                
+
                 {/* Future Protected Routes - Ready for expansion */}
-                {/* 
-                <Route 
+                {/* <Route 
                   path="/admin/security" 
                   element={
                     <AdminProtectedRoute requiredPermission="security_monitoring">
@@ -66,9 +69,9 @@ function App() {
             <Footer />
           </div>
         </Router>
-      </AuthProvider>
-    </UserTypeProvider>
+      </UserTypeProvider>
+    </AuthProvider>
   )
 }
 
-export default App
+export default App;

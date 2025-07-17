@@ -52,7 +52,7 @@ class ApiService {
     // Preserve original configuration properties
     this.baseURL = apiClient.baseURL;
     this.deviceFingerprint = null;
-    
+
     // Preserve caching system from original
     this._safeZoneCache = apiClient._safeZoneCache;
     this._cacheExpiry = apiClient._cacheExpiry;
@@ -71,7 +71,7 @@ class ApiService {
    */
   setDeviceFingerprint(fingerprint) {
     this.deviceFingerprint = fingerprint;
-    
+
     // Propagate to all services
     apiClient.setDeviceFingerprint(fingerprint);
     authService.setDeviceFingerprint(fingerprint);
@@ -597,6 +597,39 @@ class ApiService {
     return callback;
   }
 
+  // === INVITE-BASED REGISTRATION (NEW) ===
+
+  async validateInviteToken(token) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/invites/validate-token/${token}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      return response.json();
+    } catch (error) {
+      console.error('API Error: validateInviteToken', error);
+      return { success: false, message: 'Network error or server unavailable.' };
+    }
+  }
+
+  async registerWithInvite(token, userData) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/invites/register/${token}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      });
+      return response.json();
+    } catch (error) {
+      console.error('API Error: registerWithInvite', error);
+      return { success: false, message: 'Network error or server unavailable.' };
+    }
+  }
+
   // ========== FUTURE FEATURES ==========
 
   // Police registration (future) - delegate to API client
@@ -634,7 +667,7 @@ export const {
   requestWithRetry,
   requestWithIntelligenceRetry,
   batchRequests,
-  
+
   // Authentication methods
   getUserContext,
   adminLogin,
@@ -644,13 +677,13 @@ export const {
   updateUserPreferences,
   getSecurityInsights,
   getSecurityAnalytics,
-  
+
   // Health check methods
   healthCheck,
   checkHealth,
   getApiStatus,
   getApiInfo,
-  
+
   // Report methods
   submitReport,
   getReports,
@@ -668,7 +701,7 @@ export const {
   getReportSecurityInsights,
   detectCoordinatedAttacks,
   getFemaleSafetyStats,
-  
+
   // Admin methods
   getUsers,
   getUserDetails,
@@ -685,7 +718,7 @@ export const {
   getAdminDashboard,
   getAdminAnalytics,
   checkAdminAccess,
-  
+
   // Safe zone methods
   getSafeZones,
   getNearbySafeZones,
@@ -711,7 +744,7 @@ export const {
   createBatchSafeZones,
   generateSafetyRecommendations,
   generateRouteRecommendations,
-  
+
   // Utility methods
   detectDeviceType,
   trackBehavior,
@@ -724,25 +757,25 @@ export const {
   getWebSocketUrl,
   validateReportData,
   formatApiError,
-  
+
   // Configuration methods
   setDeviceFingerprint,
   getAuthHeaders,
-  
+
   // Validation methods
   getValidationQueue,
   getValidationHistory,
   getValidationStats,
-  
+
   // Female safety methods
   getFemaleSafetyRecommendations,
   getFemaleSafeZones,
   reportFemaleSafetyConcern,
-  
+
   // Real-time methods
   getRealTimeAlerts,
   subscribeToUpdates,
-  
+
   // Future features
   registerPolice,
   registerResearcher

@@ -13,6 +13,14 @@ const deviceFingerprintSchema = new mongoose.Schema({
     maxlength: 64
   },
   
+  // Link to the associated User document (can be anonymous, admin, police, researcher)
+  userId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: false, // Not required if device is ephemeral or not yet linked to a persistent user
+    index: true 
+  },
+  
   // Device Characteristics for Security Analysis
   deviceSignature: {
     canvasFingerprint: String,        // Canvas rendering signature
@@ -74,6 +82,13 @@ const deviceFingerprintSchema = new mongoose.Schema({
     inaccurateValidations: { type: Number, default: 0 },
     validationAccuracyRate: { type: Number, default: 0, min: 0, max: 100 },
     
+    // Track reports validated by this device to prevent duplicates
+    validationHistory: [{
+      reportId: { type: mongoose.Schema.Types.ObjectId, ref: 'Report' },
+      timestamp: { type: Date, default: Date.now },
+      isPositive: Boolean // Store if it was a positive or negative validation
+    }],
+
     // Security Events
     securityViolations: [String],                         // Types of violations
     lastSecurityEvent: Date,                              // Last security incident
@@ -81,6 +96,38 @@ const deviceFingerprintSchema = new mongoose.Schema({
     quarantineUntil: Date,                                // Quarantine expiration
     permanentlyBanned: { type: Boolean, default: false }  // Permanent ban status
   },
+
+  // NEW: Quarantine Logs
+  quarantineHistory: [{
+    reason: String,
+    triggeredBy: { type: String, enum: ["auto", "moderator", "threshold_violation", "system"], default: "auto" },
+    timestamp: { type: Date, default: Date.now }
+  }],
+
+  // NEW: Device Anomaly Score
+  // A single aggregated score to represent how abnormal the device is compared to other users
+  // (based on browser, plugins, fonts, etc.). Higher score = more anomalous.
+  deviceAnomalyScore: { type: Number, default: 0, min: 0, max: 100 },
+
+  // NEW: Report Submission Pattern
+  // Track time-of-day submission clusters which often emerge in abuse campaigns.
+  submissionPattern: {
+    hourlyDistribution: { type: [Number], default: Array(24).fill(0) }, // Array of 24 ints: # of reports per hour
+    peakHours: { type: [Number], default: [] },         // Most active hours (e.g., [9, 14, 22])
+  },
+
+  // NEW: Shadow Ban Field
+  // Sometimes you don’t want to quarantine outright, but silently suppress activity.
+  shadowBanned: { type: Boolean, default: false },
+
+  // NEW: Geo-fencing Drift Detection
+  // For mobile/web hybrid users, detect if someone spoofs GPS location regularly.
+  gpsSpoofingSuspected: { type: Boolean, default: false },
+  locationDriftScore: { type: Number, default: 0, min: 0, max: 100 },
+
+  // NEW: Alert Triggers or Flags for Dashboard UI
+  // To let your admin dashboard easily render warning banners for high-risk devices.
+  moderatorAlerts: { type: [String], default: [] }, // e.g. ["VPN Detected", "Botnet Behavior", "High Threat Confidence"]
   
   // Threat Intelligence Integration
   threatIntelligence: {
@@ -188,6 +235,14 @@ deviceFingerprintSchema.methods.calculateTrustScore = function() {
   if (this.threatIntelligence.botnetMember) {
     score -= 50;
   }
+
+  // Factor in device anomaly score
+  score -= this.deviceAnomalyScore * 0.5; // Higher anomaly reduces trust
+
+  // Factor in shadow ban status (if actively shadow banned, trust might be lower)
+  if (this.shadowBanned) {
+    score -= 10; // Small penalty for being shadow banned
+  }
   
   this.securityProfile.trustScore = Math.max(0, Math.min(100, score));
   return this.securityProfile.trustScore;
@@ -197,18 +252,29 @@ deviceFingerprintSchema.methods.assessThreatLevel = function() {
   const threatScore = this.threatIntelligence.threatConfidence;
   const trustScore = this.securityProfile.trustScore;
   const crossBorderSuspicion = this.bangladeshProfile.crossBorderSuspicion;
+  const anomalyScore = this.deviceAnomalyScore; // Use the new anomaly score
   
-  if (threatScore > 80 || trustScore < 20 || this.threatIntelligence.botnetMember) {
+  if (threatScore > 80 || trustScore < 20 || this.threatIntelligence.botnetMember || anomalyScore > 80) {
     this.securityProfile.riskLevel = 'critical';
-  } else if (threatScore > 60 || trustScore < 40 || crossBorderSuspicion > 70) {
+  } else if (threatScore > 60 || trustScore < 40 || crossBorderSuspicion > 70 || anomalyScore > 60) {
     this.securityProfile.riskLevel = 'high';
-  } else if (threatScore > 40 || trustScore < 60 || crossBorderSuspicion > 40) {
+  } else if (threatScore > 40 || trustScore < 60 || crossBorderSuspicion > 40 || anomalyScore > 40) {
     this.securityProfile.riskLevel = 'medium';
-  } else if (trustScore > 80 && threatScore < 20) {
+  } else if (trustScore > 80 && threatScore < 20 && anomalyScore < 20) {
     this.securityProfile.riskLevel = 'very_low';
   } else {
     this.securityProfile.riskLevel = 'low';
   }
+
+  // Update moderator alerts based on risk level and specific flags
+  this.moderatorAlerts = [];
+  if (this.securityProfile.riskLevel === 'critical') this.moderatorAlerts.push('Critical Risk Device');
+  if (this.securityProfile.riskLevel === 'high') this.moderatorAlerts.push('High Risk Device');
+  if (this.networkProfile.vpnSuspected) this.moderatorAlerts.push('VPN Detected');
+  if (this.networkProfile.torDetected) this.moderatorAlerts.push('Tor Detected');
+  if (this.gpsSpoofingSuspected) this.moderatorAlerts.push('GPS Spoofing Suspected');
+  if (this.threatIntelligence.botnetMember) this.moderatorAlerts.push('Botnet Behavior');
+  if (this.shadowBanned) this.moderatorAlerts.push('Shadow Banned');
   
   return this.securityProfile.riskLevel;
 };
@@ -216,7 +282,8 @@ deviceFingerprintSchema.methods.assessThreatLevel = function() {
 deviceFingerprintSchema.methods.shouldQuarantine = function() {
   return this.securityProfile.riskLevel === 'critical' || 
          this.threatIntelligence.threatConfidence > 85 ||
-         this.securityProfile.spamReports > 5;
+         this.securityProfile.spamReports > 5 ||
+         this.gpsSpoofingSuspected; // New condition for quarantine
 };
 
 deviceFingerprintSchema.methods.updateActivity = function() {
@@ -229,6 +296,25 @@ deviceFingerprintSchema.methods.updateActivity = function() {
   const trustFactor = this.securityProfile.trustScore;
   
   this.activityHistory.engagementScore = Math.round((sessionQuality + participationQuality + trustFactor) / 3);
+
+  // Update submission pattern (simple hourly count)
+  const currentHour = new Date().getHours();
+  this.submissionPattern.hourlyDistribution[currentHour] = (this.submissionPattern.hourlyDistribution[currentHour] || 0) + 1;
+  
+  // Recalculate peak hours (simple example, could be more complex)
+  const maxReports = Math.max(...this.submissionPattern.hourlyDistribution);
+  this.submissionPattern.peakHours = this.submissionPattern.hourlyDistribution
+    .map((count, hour) => (count === maxReports && maxReports > 0 ? hour : -1))
+    .filter(hour => hour !== -1);
+};
+
+// Method to add a quarantine event to history
+deviceFingerprintSchema.methods.addQuarantineEvent = function(reason, triggeredBy = "auto") {
+  this.quarantineHistory.push({ reason, triggeredBy, timestamp: new Date() });
+  // Keep history to a reasonable size, e.g., last 20 events
+  if (this.quarantineHistory.length > 20) {
+    this.quarantineHistory = this.quarantineHistory.slice(-20);
+  }
 };
 
 // Static methods for security analysis
@@ -238,7 +324,9 @@ deviceFingerprintSchema.statics.findSuspiciousDevices = function(criteria = {}) 
       { 'securityProfile.riskLevel': { $in: ['high', 'critical'] } },
       { 'threatIntelligence.threatConfidence': { $gt: 70 } },
       { 'bangladeshProfile.crossBorderSuspicion': { $gt: 70 } },
-      { 'securityProfile.spamReports': { $gt: 3 } }
+      { 'securityProfile.spamReports': { $gt: 3 } },
+      { 'deviceAnomalyScore': { $gt: 70 } }, // New condition
+      { 'shadowBanned': true } // Include shadow banned devices
     ],
     ...criteria
   };
@@ -265,13 +353,20 @@ deviceFingerprintSchema.statics.detectCoordinatedAttack = async function(timeWin
   
   // Look for suspicious clustering
   Object.entries(deviceGroups).forEach(([pattern, devices]) => {
-    if (devices.length > 5) { // More than 5 similar devices active
-      suspiciousPatterns.push({
-        pattern,
-        deviceCount: devices.length,
-        suspicionLevel: 'high',
-        devices: devices.map(d => d.fingerprintId)
-      });
+    if (devices.length >= 5) { // 5+ reports in same area within time window
+      const uniqueDevices = new Set(devices.map(d => d.fingerprintId));
+      const avgSecurityScore = devices.reduce((sum, d) => sum + d.securityProfile.trustScore, 0) / devices.length; // Use device trust score
+      
+      if (uniqueDevices.size >= 3 && avgSecurityScore < 60) {
+        suspiciousPatterns.push({
+          pattern,
+          deviceCount: devices.length,
+          uniqueDevices: uniqueDevices.size,
+          avgSecurityScore,
+          suspicionLevel: 'high',
+          devices: devices.map(d => d.fingerprintId)
+        });
+      }
     }
   });
   
@@ -284,12 +379,24 @@ deviceFingerprintSchema.pre('save', function(next) {
   this.calculateTrustScore();
   this.assessThreatLevel();
   
-  // Check for quarantine
-  if (this.shouldQuarantine() && !this.securityProfile.quarantineStatus) {
-    this.securityProfile.quarantineStatus = true;
-    this.securityProfile.quarantineUntil = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-    console.log(`🚨 Device ${this.fingerprintId} auto-quarantined due to high risk`);
+  // Check for quarantine status change to log history
+  if (this.isModified('securityProfile.quarantineStatus') && this.securityProfile.quarantineStatus) {
+    this.addQuarantineEvent('Auto-quarantined due to high risk/spam/spoofing', 'auto');
   }
+
+  // Placeholder for calculating deviceAnomalyScore
+  // In a real application, this would involve more complex logic
+  // comparing deviceSignature fields to known patterns or averages.
+  // For now, let's make it a simple example.
+  let anomaly = 0;
+  if (this.networkProfile.vpnSuspected || this.networkProfile.proxyDetected || this.networkProfile.torDetected) {
+    anomaly += 30;
+  }
+  if (this.behaviorProfile.humanBehaviorScore < 30) {
+    anomaly += 20;
+  }
+  // Add more rules based on deviceSignature characteristics
+  this.deviceAnomalyScore = Math.min(100, anomaly);
   
   next();
 });

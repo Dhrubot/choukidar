@@ -39,7 +39,12 @@ const userSchema = new mongoose.Schema({
       accountLocked: { type: Boolean, default: false },
       lockUntil: Date,
       twoFactorEnabled: { type: Boolean, default: false },
-      adminLevel: { type: Number, min: 1, max: 10, default: 5 }
+      twoFactorSecret: String, // For 2FA authentication
+      adminLevel: { type: Number, min: 1, max: 10, default: 5 },
+      emailVerified: { type: Boolean, default: false }, // For email verification
+      emailVerificationToken: String, // For email verification process
+      passwordResetToken: String, // For password reset functionality
+      passwordResetExpires: Date // Expiry time for password reset tokens
     },
     
     // Police Officer Information (Future Implementation Ready)
@@ -51,6 +56,7 @@ const userSchema = new mongoose.Schema({
       district: String,
       thana: String,
       phoneNumber: String,
+      email: String, // Police officers also have email
       verificationStatus: {
         type: String,
         enum: ['pending', 'verified', 'rejected'],
@@ -75,6 +81,7 @@ const userSchema = new mongoose.Schema({
       ethicsApproval: String,
       supervisorContact: String,
       expectedDuration: Number, // months
+      email: String, // Researchers also have email
       dataUsageAgreement: { type: Boolean, default: false },
       verificationStatus: {
         type: String,
@@ -216,14 +223,21 @@ const userSchema = new mongoose.Schema({
   indexes: [
     { userId: 1 },
     { userType: 1 },
+    { 'roleData.admin.username': 1 },
+    { 'roleData.admin.email': 1 },
+    { 'roleData.police.badgeNumber': 1 },
+    { 'roleData.police.phoneNumber': 1 },
+    { 'roleData.researcher.email': 1 },
     { 'securityProfile.overallTrustScore': -1 },
     { 'securityProfile.securityRiskLevel': 1 },
+    { 'securityProfile.quarantineStatus': 1 },
     { 'anonymousProfile.deviceFingerprint': 1 },
-    { lastSeen: -1 }
+    { 'activityProfile.lastSeen': -1 }
   ]
 });
 
-// Security Methods
+// === SECURITY METHODS ===
+
 userSchema.methods.updateSecurityProfile = async function() {
   // Get associated device fingerprint data
   if (this.securityProfile.primaryDeviceFingerprint) {
@@ -322,6 +336,8 @@ userSchema.methods.addSecurityEvent = function(eventType, details, severity = 'm
   }
 };
 
+// === PERMISSION METHODS ===
+
 userSchema.methods.hasPermission = function(permission) {
   if (this.userType === 'admin') {
     return this.roleData.admin.permissions.includes(permission) || 
@@ -351,7 +367,8 @@ userSchema.methods.hasPermission = function(permission) {
   return ['view_map', 'submit_report', 'validate_reports'].includes(permission);
 };
 
-// Static methods
+// === STATIC METHODS ===
+
 userSchema.statics.createAnonymousUser = function(deviceFingerprint) {
   const anonymousId = `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
@@ -394,7 +411,8 @@ userSchema.statics.getSecurityInsights = async function() {
   return insights;
 };
 
-// Password methods for admin users
+// === PASSWORD AND AUTHENTICATION METHODS ===
+
 userSchema.methods.setPassword = async function(password) {
   if (this.userType !== 'admin') {
     throw new Error('Password can only be set for admin users');
@@ -433,11 +451,65 @@ userSchema.methods.resetLoginAttempts = function() {
   }
 };
 
+// === UTILITY METHODS ===
+
+userSchema.methods.isQuarantined = function() {
+  if (!this.securityProfile.quarantineStatus) return false;
+  
+  // Check if quarantine has expired
+  if (this.securityProfile.quarantineUntil && new Date() > this.securityProfile.quarantineUntil) {
+    this.securityProfile.quarantineStatus = false;
+    this.securityProfile.quarantineReason = null;
+    this.securityProfile.quarantineUntil = null;
+    return false;
+  }
+  
+  return true;
+};
+
+userSchema.methods.updateLastSeen = function() {
+  this.activityProfile.lastSeen = new Date();
+  this.activityProfile.totalSessions += 1;
+};
+
+userSchema.methods.addDeviceAssociation = function(deviceFingerprint, deviceType, isPrimary = false) {
+  // Check if device already associated
+  const existingDevice = this.securityProfile.associatedDevices.find(
+    device => device.fingerprintId === deviceFingerprint
+  );
+  
+  if (existingDevice) {
+    existingDevice.lastUsed = new Date();
+    if (isPrimary) existingDevice.isPrimary = true;
+  } else {
+    this.securityProfile.associatedDevices.push({
+      fingerprintId: deviceFingerprint,
+      deviceType: deviceType,
+      lastUsed: new Date(),
+      trustLevel: 'unknown',
+      isPrimary: isPrimary
+    });
+  }
+  
+  if (isPrimary) {
+    this.securityProfile.primaryDeviceFingerprint = deviceFingerprint;
+  }
+};
+
+// === MIDDLEWARE ===
+
 // Pre-save middleware for security updates
 userSchema.pre('save', async function(next) {
   // Update security profile if device fingerprint changed
   if (this.isModified('securityProfile.primaryDeviceFingerprint')) {
     await this.updateSecurityProfile();
+  }
+  
+  // Device rotation - limit associated devices to 10 most recent
+  if (this.securityProfile.associatedDevices.length > 10) {
+    // Sort by lastUsed and keep most recent 10
+    this.securityProfile.associatedDevices.sort((a, b) => b.lastUsed - a.lastUsed);
+    this.securityProfile.associatedDevices = this.securityProfile.associatedDevices.slice(0, 10);
   }
   
   // Update last seen
@@ -450,6 +522,20 @@ userSchema.pre('save', async function(next) {
 userSchema.post('save', function(doc) {
   if (doc.securityProfile.securityRiskLevel === 'high' || doc.securityProfile.securityRiskLevel === 'critical') {
     console.log(`⚠️ High-risk user detected: ${doc.userId} - Risk: ${doc.securityProfile.securityRiskLevel}, Trust: ${doc.securityProfile.overallTrustScore}`);
+  }
+});
+
+// Post-save middleware for automatic quarantine cleanup
+userSchema.post('save', function(doc) {
+  // Auto-cleanup expired quarantines
+  if (doc.securityProfile.quarantineStatus && 
+      doc.securityProfile.quarantineUntil && 
+      new Date() > doc.securityProfile.quarantineUntil) {
+    
+    doc.securityProfile.quarantineStatus = false;
+    doc.securityProfile.quarantineReason = null;
+    doc.securityProfile.quarantineUntil = null;
+    doc.save(); // This won't trigger infinite loop due to the condition
   }
 });
 

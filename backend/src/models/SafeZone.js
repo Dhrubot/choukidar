@@ -721,17 +721,15 @@ safeZoneSchema.virtual('currentSafetyScore').get(function() {
 safeZoneSchema.virtual('currentFemaleSafetyScore').get(function() {
   const hour = new Date().getHours();
   
-  if (hour >= 6 && hour < 12) {
-    return this.timeOfDaySafety.femaleSafety.morning;
-  } else if (hour >= 12 && hour < 18) {
-    return this.timeOfDaySafety.femaleSafety.afternoon;
-  } else if (hour >= 18 && hour < 22) {
-    return this.timeOfDaySafety.femaleSafety.evening;
-  } else if (hour >= 22 || hour < 2) {
-    return this.timeOfDaySafety.femaleSafety.night;
-  } else {
-    return this.timeOfDaySafety.femaleSafety.lateNight;
-  }
+  let timePeriod;
+  if (hour >= 5 && hour < 8) timePeriod = 'earlyMorning';
+  else if (hour >= 8 && hour < 12) timePeriod = 'morning';
+  else if (hour >= 12 && hour < 17) timePeriod = 'afternoon';
+  else if (hour >= 17 && hour < 20) timePeriod = 'evening';
+  else if (hour >= 20 || hour < 2) timePeriod = 'night';
+  else timePeriod = 'lateNight';
+  
+  return this.femaleSafety?.safetyAssessment?.timeBasedSafety?.[timePeriod]?.safetyScore || null;
 });
 
 // REFINED: Virtual for getting granular time-based safety
@@ -885,7 +883,7 @@ safeZoneSchema.methods.calculateDynamicFemaleSafetyScore = function(options = {}
   let baseScore = this.femaleSafety?.overallFemaleSafety || 5;
   
   // Time adjustment
-  const timeData = this.getTimeBasedSafety(timeOfDay);
+  const timeData = this.femaleSafety?.safetyAssessment?.timeBasedSafety?.[this.getTimePeriod(timeOfDay)];
   if (timeData) {
     baseScore = (baseScore + timeData.safetyScore) / 2;
   }
@@ -914,6 +912,17 @@ safeZoneSchema.methods.calculateDynamicFemaleSafetyScore = function(options = {}
   
   return Math.round(baseScore * 10) / 10; // Round to 1 decimal place
 };
+
+// Helper to get time period string from hour
+safeZoneSchema.methods.getTimePeriod = function(hour) {
+  if (hour >= 5 && hour < 8) return 'earlyMorning';
+  else if (hour >= 8 && hour < 12) return 'morning';
+  else if (hour >= 12 && hour < 17) return 'afternoon';
+  else if (hour >= 17 && hour < 20) return 'evening';
+  else if (hour >= 20 || hour < 2) return 'night';
+  else return 'lateNight';
+};
+
 
 // REFINED: Method to get cultural guidelines for female visitors
 safeZoneSchema.methods.getCulturalGuidelinesForFemales = function() {
@@ -1314,7 +1323,7 @@ safeZoneSchema.statics.getFemaleSafetyStats = async function() {
         count: { $sum: 1 },
         avgFemaleSafety: { $avg: '$femaleSafety.overallFemaleSafety' },
         verifiedCount: {
-          $sum: { $cond: ['$femaleVerification.verifiedByFemale', 1, 0] }
+          $sum: { $cond: [{ $eq: ['$femaleVerification.verifiedByFemale', 1, 0] } , 1, 0] }
         }
       }
     },

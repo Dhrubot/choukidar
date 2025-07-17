@@ -1,22 +1,29 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const http = require('http'); // Import http module
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ENHANCED: Import security middleware
-const userTypeDetection = require('./src/middleware/userTypeDetection');
+// ENHANCED: Import security middleware functions as named exports
+const { userTypeDetection } = require('./src/middleware/userTypeDetection');
+const SocketHandler = require('./src/websocket/socketHandler'); // Import the SocketHandler class
 
 // Basic Middleware (PRESERVED)
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://choukidar.com'] 
+    : ['http://localhost:3000', 'http://localhost:5173'],
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ENHANCED: Security middleware - Apply device fingerprinting and user context to all requests
 // This middleware must come BEFORE route definitions to ensure user context is available
-app.use(userTypeDetection);
+app.use(userTypeDetection); // userTypeDetection is the main middleware function
 
 // ENHANCED: Security headers for additional protection
 app.use((req, res, next) => {
@@ -68,6 +75,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// Create HTTP server
+const server = http.createServer(app);
+
+// Initialize WebSocket server with the http server
+const socketHandler = new SocketHandler(server);
+// Make socketHandler accessible in route handlers via app.locals
+app.locals.socketHandler = socketHandler;
+
+
 // EXISTING ROUTES (PRESERVED)
 app.use('/api/reports', require('./src/routes/reports'));
 app.use('/api/admin', require('./src/routes/admin'));
@@ -76,6 +92,10 @@ app.use('/api/safezones', require('./src/routes/safeZones'));
 // NEW ENHANCED ROUTES: Authentication and User Management
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/user-types', require('./src/routes/userTypes'));
+
+// invite only registration - This line was causing the error due to incorrect import
+// The invitesRoutes module itself needs to correctly import its middleware
+app.use('/api/invites', require('./src/routes/invites')); // Corrected: directly require the module
 
 // ENHANCED: Health check with security status
 app.get('/api/health', (req, res) => {
@@ -287,7 +307,7 @@ app.use((error, req, res, next) => {
 });
 
 // Server startup with enhanced logging
-app.listen(PORT, () => {
+server.listen(PORT, () => { // Listen on the http server, not the express app
   console.log('🚀 SafeStreets Bangladesh API server started');
   console.log(`📡 Server running on port ${PORT}`);
   console.log('🛡️ Enhanced Security Features:');

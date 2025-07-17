@@ -1,107 +1,53 @@
-// === backend/src/routes/admin.js (FIXED - Proper All Reports Endpoint) ===
+// === backend/src/routes/admin.js (Refactored) ===
+// This file now contains admin-specific analytics and dashboard routes.
+// Basic report management (viewing, approving, rejecting) has been consolidated
+// into './reports.js' to avoid duplication and use more advanced features.
+
 const express = require('express');
 const router = express.Router();
 const Report = require('../models/Report');
+const AuditLog = require('../models/AuditLog'); // For logging admin actions
+const { userTypeDetection } = require('../middleware/userTypeDetection');
+const { requireAdmin, requirePermission } = require('../middleware/roleBasedAccess'); // Corrected import
 
-// GET pending reports (admin only) - ORIGINAL FUNCTIONALITY PRESERVED
-router.get('/reports', async (req, res) => {
+// Apply security middleware to all admin routes
+router.use(userTypeDetection);
+router.use(requireAdmin); // Ensures only admins can access these routes
+
+/**
+ * Helper function to create an audit log entry.
+ * @param {object} req - The request object from Express.
+ * @param {string} actionType - The type of action from the AuditLog schema enum.
+ * @param {object} details - Any additional details to log.
+ * @param {string} severity - The severity level of the action.
+ */
+const logAdminAction = async (req, actionType, details = {}, severity = 'low') => {
   try {
-    const reports = await Report.find({ status: 'pending' })
-      .select('+location.originalCoordinates') // Show original coordinates to admins
-      .sort({ timestamp: -1, createdAt: -1 });
-    
-    console.log(`✅ Found ${reports.length} pending reports for admin`);
-    
-    res.json({
-      success: true,
-      count: reports.length,
-      data: reports
+    // Ensure actor information is consistent with AuditLog model
+    const actorInfo = {
+      userId: req.userContext.user?._id, // Use _id for database reference
+      userType: req.userContext.userType,
+      username: req.userContext.user?.roleData?.admin?.username,
+      deviceFingerprint: req.userContext.deviceFingerprint?.fingerprintId,
+      ipAddress: req.ip // In a real app, hash or obfuscate this
+    };
+
+    await AuditLog.create({
+      actor: actorInfo,
+      actionType,
+      details,
+      outcome: 'success', // Assuming success for these logging contexts
+      severity
     });
   } catch (error) {
-    console.error('❌ Error fetching pending reports:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching pending reports',
-      error: error.message 
-    });
+    console.error(`❌ Audit log failed for action ${actionType}:`, error);
   }
-});
+};
 
-// GET all reports (admin only) - FIXED TO RETURN ALL REPORTS
-router.get('/reports/all', async (req, res) => {
+
+// GET /api/admin/dashboard - Admin dashboard stats
+router.get('/dashboard', requirePermission('view_admin_analytics'), async (req, res) => {
   try {
-    // Fetch ALL reports regardless of status - THIS IS THE KEY FIX
-    const reports = await Report.find({}) // Remove any status filter
-      .select('+location.originalCoordinates') // Show original coordinates to admins
-      .sort({ timestamp: -1, createdAt: -1 }); // Sort by newest first
-    
-    console.log(`✅ Found ${reports.length} total reports for admin (pending: ${reports.filter(r => r.status === 'pending').length}, approved: ${reports.filter(r => r.status === 'approved').length}, rejected: ${reports.filter(r => r.status === 'rejected').length})`);
-    
-    res.json({
-      success: true,
-      count: reports.length,
-      data: reports
-    });
-  } catch (error) {
-    console.error('❌ Error fetching all reports:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error fetching all reports',
-      error: error.message 
-    });
-  }
-});
-
-// PUT approve/reject report - ORIGINAL FUNCTIONALITY PRESERVED
-router.put('/reports/:id', async (req, res) => {
-  try {
-    const { status } = req.body;
-    
-    if (!['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status. Must be "approved" or "rejected"'
-      });
-    }
-
-    const report = await Report.findByIdAndUpdate(
-      req.params.id,
-      { 
-        status, 
-        moderatedBy: 'admin', // Use proper auth later
-        moderatedAt: new Date() 
-      },
-      { new: true }
-    );
-
-    if (!report) {
-      return res.status(404).json({
-        success: false,
-        message: 'Report not found'
-      });
-    }
-
-    console.log(`✅ Report ${req.params.id} ${status} successfully`);
-
-    res.json({
-      success: true,
-      message: `Report ${status} successfully`,
-      data: report
-    });
-  } catch (error) {
-    console.error('❌ Error updating report:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error updating report',
-      error: error.message 
-    });
-  }
-});
-
-// GET admin dashboard stats - ENHANCED with better logging
-router.get('/dashboard', async (req, res) => {
-  try {
-    // Original stats preserved
     const basicStats = {
       total: await Report.countDocuments(),
       pending: await Report.countDocuments({ status: 'pending' }),
@@ -109,65 +55,49 @@ router.get('/dashboard', async (req, res) => {
       rejected: await Report.countDocuments({ status: 'rejected' })
     };
 
-    // Enhanced security stats
     const securityStats = {
       crossBorderReports: await Report.countDocuments({ 'securityFlags.crossBorderReport': true }),
       potentialSpam: await Report.countDocuments({ 'securityFlags.potentialSpam': true }),
-      bangladeshReports: await Report.countDocuments({ 'location.withinBangladesh': true }),
-      flaggedReports: await Report.countDocuments({
-        $or: [
-          { 'securityFlags.crossBorderReport': true },
-          { 'securityFlags.potentialSpam': true },
-          { 'securityFlags.suspiciousLocation': true }
-        ]
-      })
+      flaggedForReview: await Report.countDocuments({ status: { $in: ['flagged', 'under_review'] } })
     };
 
-    // Location source breakdown
-    const sourceBreakdown = await Report.aggregate([
-      {
-        $group: {
-          _id: '$location.source',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    console.log(`✅ Dashboard stats: Total: ${basicStats.total}, Pending: ${basicStats.pending}, Approved: ${basicStats.approved}, Rejected: ${basicStats.rejected}`);
+    // Log this action
+    await logAdminAction(req, 'view_admin_analytics', { dashboard: 'main' }, 'low');
 
     res.json({
       success: true,
       data: {
-        ...basicStats, // Original stats maintained
-        security: securityStats, // Security insights
-        sourceBreakdown // Location source analytics
+        ...basicStats,
+        security: securityStats,
       }
     });
   } catch (error) {
     console.error('❌ Error fetching dashboard stats:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error fetching dashboard stats',
-      error: error.message 
+      error: error.message
     });
   }
 });
 
-// GET reports with security flags (additional admin feature)
-router.get('/reports/flagged', async (req, res) => {
+// GET /api/admin/reports/flagged - Get reports with security flags
+router.get('/reports/flagged', requirePermission('moderate_content'), async (req, res) => {
   try {
     const flaggedReports = await Report.find({
       $or: [
         { 'securityFlags.crossBorderReport': true },
         { 'securityFlags.potentialSpam': true },
-        { 'securityFlags.suspiciousLocation': true }
+        { 'securityFlags.suspiciousLocation': true },
+        { status: { $in: ['flagged', 'under_review'] } }
       ]
     })
-    .select('+location.originalCoordinates') // Include original coordinates for admins
-    .sort({ timestamp: -1, createdAt: -1 });
-    
-    console.log(`✅ Found ${flaggedReports.length} flagged reports for admin`);
-    
+    .select('+location.originalCoordinates')
+    .sort({ 'moderation.priorityLevel': -1, timestamp: -1 });
+
+    // Log this action
+    await logAdminAction(req, 'view_flagged_reports', { count: flaggedReports.length }, 'medium');
+
     res.json({
       success: true,
       count: flaggedReports.length,
@@ -175,16 +105,16 @@ router.get('/reports/flagged', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching flagged reports:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error fetching flagged reports',
-      error: error.message 
+      error: error.message
     });
   }
 });
 
-// GET security analytics for admin monitoring
-router.get('/analytics/security', async (req, res) => {
+// GET /api/admin/analytics/security - Security analytics for admin monitoring
+router.get('/analytics/security', requirePermission('view_security_analytics'), async (req, res) => {
   try {
     const analytics = await Report.aggregate([
       {
@@ -197,55 +127,206 @@ router.get('/analytics/security', async (req, res) => {
           potentialSpam: {
             $sum: { $cond: ['$securityFlags.potentialSpam', 1, 0] }
           },
-          bangladeshReports: {
-            $sum: { $cond: ['$location.withinBangladesh', 1, 0] }
-          },
-          avgSeverity: { $avg: '$severity' }
+          avgSecurityScore: { $avg: '$securityScore' }
         }
       }
     ]);
 
-    // Geographic distribution
-    const geoDistribution = await Report.aggregate([
-      {
-        $group: {
-          _id: '$location.withinBangladesh',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    // Reports by status and security flags
     const statusBreakdown = await Report.aggregate([
       {
         $group: {
-          _id: {
-            status: '$status',
-            crossBorder: '$securityFlags.crossBorderReport'
-          },
+          _id: '$status',
           count: { $sum: 1 }
         }
       }
     ]);
 
-    console.log(`✅ Security analytics generated successfully`);
+    // Log this action
+    await logAdminAction(req, 'view_security_analytics', { source: 'reports' }, 'medium');
 
     res.json({
       success: true,
       data: {
         summary: analytics[0] || {},
-        geoDistribution,
-        statusBreakdown
+        statusBreakdown,
       }
     });
   } catch (error) {
     console.error('❌ Error fetching security analytics:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error fetching security analytics',
-      error: error.message 
+      error: error.message
     });
   }
 });
 
 module.exports = router;
+
+// === backend/src/routes/admin.js ===
+// Enhanced Admin Routes with Role-Specific Middleware
+
+// const express = require('express');
+// const router = express.Router();
+// const User = require('../models/User');
+// const Report = require('../models/Report');
+// const AuditLog = require('../models/AuditLog');
+// const RoleMiddleware = require('../middleware/roleSpecificMiddleware');
+// const { userTypeDetection } = require('../middleware/userTypeDetection');
+// const { adminOperationLimiter } = require('../middleware/rateLimiter');
+
+// router.use(userTypeDetection);
+// router.use(adminOperationLimiter);
+
+// // Admin dashboard with enhanced statistics
+// router.get('/dashboard', RoleMiddleware.apply(RoleMiddleware.adminAnalytics), async (req, res) => {
+//   try {
+//     const [userStats, reportStats, securityStats, auditStats] = await Promise.all([
+//       // User statistics
+//       User.aggregate([
+//         {
+//           $group: {
+//             _id: '$userType',
+//             count: { $sum: 1 },
+//             avgTrustScore: { $avg: '$securityProfile.overallTrustScore' }
+//           }
+//         }
+//       ]),
+      
+//       // Report statistics
+//       Report.aggregate([
+//         {
+//           $group: {
+//             _id: '$status',
+//             count: { $sum: 1 }
+//           }
+//         }
+//       ]),
+      
+//       // Security statistics
+//       User.aggregate([
+//         {
+//           $group: {
+//             _id: '$securityProfile.securityRiskLevel',
+//             count: { $sum: 1 }
+//           }
+//         }
+//       ]),
+      
+//       // Recent audit activity
+//       AuditLog.countDocuments({
+//         timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+//       })
+//     ]);
+
+//     res.json({
+//       success: true,
+//       dashboard: {
+//         users: userStats,
+//         reports: reportStats,
+//         security: securityStats,
+//         auditActivity: auditStats,
+//         generatedAt: new Date().toISOString()
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('❌ Dashboard error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Failed to load dashboard'
+//     });
+//   }
+// });
+
+// // User management routes with enhanced security
+// router.get('/users', RoleMiddleware.apply(RoleMiddleware.adminUserManagement), async (req, res) => {
+//   try {
+//     const {
+//       userType = 'all',
+//       riskLevel = 'all',
+//       quarantined = 'all',
+//       emailVerified = 'all',
+//       page = 1,
+//       limit = 50
+//     } = req.query;
+
+//     const query = {};
+    
+//     if (userType !== 'all') query.userType = userType;
+//     if (riskLevel !== 'all') query['securityProfile.securityRiskLevel'] = riskLevel;
+//     if (quarantined !== 'all') query['securityProfile.quarantineStatus'] = quarantined === 'true';
+//     if (emailVerified !== 'all') query['roleData.admin.emailVerified'] = emailVerified === 'true';
+
+//     const users = await User.find(query)
+//       .select('-roleData.admin.passwordHash -roleData.admin.passwordResetToken')
+//       .sort({ 'activityProfile.lastSeen': -1 })
+//       .limit(parseInt(limit))
+//       .skip((parseInt(page) - 1) * parseInt(limit))
+//       .lean();
+
+//     const total = await User.countDocuments(query);
+
+//     res.json({
+//       success: true,
+//       users,
+//       pagination: {
+//         page: parseInt(page),
+//         limit: parseInt(limit),
+//         total,
+//         pages: Math.ceil(total / limit)
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('❌ Users query error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Failed to get users'
+//     });
+//   }
+// });
+
+// // System health check
+// router.get('/health', RoleMiddleware.apply(RoleMiddleware.systemAdmin), async (req, res) => {
+//   try {
+//     const health = {
+//       status: 'healthy',
+//       timestamp: new Date().toISOString(),
+//       services: {
+//         database: 'connected',
+//         redis: 'connected', // You'd implement actual Redis health check
+//         email: 'operational'
+//       },
+//       metrics: {
+//         totalUsers: await User.countDocuments(),
+//         activeUsers: await User.countDocuments({
+//           'activityProfile.lastSeen': { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+//         }),
+//         totalReports: await Report.countDocuments(),
+//         pendingReports: await Report.countDocuments({ status: 'pending' }),
+//         auditLogsToday: await AuditLog.countDocuments({
+//           timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+//         })
+//       }
+//     };
+
+//     res.json({
+//       success: true,
+//       health
+//     });
+
+//   } catch (error) {
+//     console.error('❌ Health check error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Health check failed',
+//       health: {
+//         status: 'unhealthy',
+//         error: error.message
+//       }
+//     });
+//   }
+// });
+
+// module.exports = router;

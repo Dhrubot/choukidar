@@ -146,7 +146,7 @@ const checkPermission = async (req, res, next) => {
     if (userContext.securityContext.quarantined) {
       const allowedForQuarantined = ['view_map']; // Very limited access
       
-      if (!allowedForQuarantined.includes(requiredPermission)) {
+      if (!allowedForQuallowedForQuarantined.includes(requiredPermission)) {
         console.log(`🚨 Quarantined user ${userContext.user.userId} attempted to access: ${requiredPermission}`);
         
         // Log security event
@@ -404,6 +404,6 @@ module.exports = {
   requireMinimumTrust,
   requireMaxRisk,
   getUserPermissions,
-  userHasPermission,
+  userHasPermission, // Keeping this for now as it's used internally by checkPermission
   PERMISSIONS
 };

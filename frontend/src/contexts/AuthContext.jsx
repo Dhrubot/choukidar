@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import apiService from '../services/api';
-import { useUserType } from './UserTypeContext';
+// REMOVED: import { useUserType } from './UserTypeContext'; // AuthContext should not directly depend on UserTypeContext
 
 // Admin authentication states
 const AUTH_STATES = {
@@ -303,17 +303,17 @@ const AuthContext = createContext();
 // AuthProvider component
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
-  const { deviceFingerprint, userType } = useUserType();
-  
+  // REMOVED: const { deviceFingerprint, userType } = useUserType(); // This line caused the error
+
   // Admin login function
-  const loginAdmin = useCallback(async (credentials) => {
+  const loginAdmin = useCallback(async (credentials, deviceFingerprint) => { // ADDED deviceFingerprint as argument
     try {
       dispatch({ type: ActionTypes.LOGIN_START });
       
       // Call API service for admin login
       const response = await apiService.adminLogin({
         ...credentials,
-        deviceFingerprint: deviceFingerprint
+        deviceFingerprint: deviceFingerprint // Use the passed deviceFingerprint
       });
       
       if (response.success) {
@@ -370,7 +370,7 @@ export const AuthProvider = ({ children }) => {
       });
       return { success: false, message: 'Login failed. Please try again.' };
     }
-  }, [deviceFingerprint]);
+  }, []); // Removed deviceFingerprint from dependencies as it's now an argument
   
   // Admin logout function
   const logoutAdmin = useCallback(async () => {

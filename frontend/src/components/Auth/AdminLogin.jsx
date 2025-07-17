@@ -19,7 +19,7 @@ import {
   Settings
 } from 'lucide-react';
 import { useAuth, useAdminAuth } from '../../contexts/AuthContext';
-import { useUserType } from '../../contexts/UserTypeContext';
+import { useUserType } from '../../contexts/UserTypeContext'; // Keep this import
 
 /**
  * AdminLogin Component
@@ -49,7 +49,7 @@ const AdminLogin = ({
   } = useAdminAuth();
   
   // User type context for device fingerprinting
-  const { deviceFingerprint } = useUserType();
+  const { deviceFingerprint } = useUserType(); // Get device fingerprint here
   
   // Form state
   const [formData, setFormData] = useState({
@@ -117,12 +117,15 @@ const AdminLogin = ({
     }
     
     try {
-      const result = await loginAdmin({
-        username: formData.username.trim(),
-        password: formData.password,
-        rememberMe: rememberMe,
-        deviceFingerprint: deviceFingerprint
-      });
+      // Pass deviceFingerprint as the second argument to loginAdmin
+      const result = await loginAdmin(
+        {
+          username: formData.username.trim(),
+          password: formData.password,
+          rememberMe: rememberMe,
+        },
+        deviceFingerprint // Pass deviceFingerprint here
+      );
       
       if (result.success) {
         console.log('✅ Admin login successful');
@@ -417,16 +420,16 @@ const AdminLogin = ({
       
       {/* Login Attempts Warning */}
       {adminSecurityContext?.loginAttempts > 0 && (
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-center space-x-2 text-yellow-700">
-            <AlertTriangle className="w-4 h-4" />
-            <span className="text-sm">
-              {adminSecurityContext.loginAttempts} failed attempt{adminSecurityContext.loginAttempts !== 1 ? 's' : ''}. 
-              {5 - adminSecurityContext.loginAttempts} remaining before account lock.
-            </span>
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center space-x-2 text-yellow-700">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-sm">
+                {adminSecurityContext.loginAttempts} failed attempt{adminSecurityContext.loginAttempts !== 1 ? 's' : ''}. 
+                {5 - adminSecurityContext.loginAttempts} remaining before account lock.
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
       
       {/* Footer */}
       <div className="mt-8 text-center text-sm text-neutral-600">
