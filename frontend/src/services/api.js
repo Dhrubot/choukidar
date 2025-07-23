@@ -32,6 +32,7 @@ import adminService from './features/adminService.js';
 import safeZoneService from './features/safeZoneService.js';
 import behaviorService from './features/behaviorService.js';
 import { calculateDistance, calculateRouteSafetyScore } from './utils/geoUtils.js';
+import { io } from 'socket.io-client';
 
 /**
  * Main API Service class that orchestrates all feature services.
@@ -519,7 +520,121 @@ class ApiService {
 
   // ========== UTILITY METHODS ==========
 
-  // Subscribe to real-time updates - delegate to API client
+  // Subscribe to real-time updates - COMPLETE IMPLEMENTATION
+  subscribeToUpdates(callback) {
+    try {
+      // Initialize Socket.IO connection if not already connected
+      if (!this.socket) {
+        const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+        this.socket = io(socketUrl, {
+          transports: ['websocket', 'polling'],
+          timeout: 20000,
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionAttempts: 5
+        })
+
+        // Connection event handlers
+        this.socket.on('connect', () => {
+          console.log('✅ Real-time connection established')
+        })
+
+        this.socket.on('disconnect', (reason) => {
+          console.log('❌ Real-time connection lost:', reason)
+        })
+
+        this.socket.on('reconnect', (attemptNumber) => {
+          console.log('🔄 Real-time connection restored after', attemptNumber, 'attempts')
+        })
+
+        this.socket.on('connect_error', (error) => {
+          console.error('❌ Real-time connection error:', error)
+        })
+      }
+
+      // Subscribe to different types of real-time updates
+      const eventHandlers = {
+        'new_report': (data) => {
+          callback({
+            type: 'new_report',
+            data: data,
+            timestamp: new Date(),
+            message: `New ${data.type} report in ${data.location?.district || 'Unknown'}`
+          })
+        },
+        'report_updated': (data) => {
+          callback({
+            type: 'report_updated', 
+            data: data,
+            timestamp: new Date(),
+            message: `Report ${data._id} status changed to ${data.status}`
+          })
+        },
+        'safe_zone_updated': (data) => {
+          callback({
+            type: 'safe_zone_updated',
+            data: data, 
+            timestamp: new Date(),
+            message: `Safe zone "${data.name}" updated`
+          })
+        },
+        'security_alert': (data) => {
+          callback({
+            type: 'security_alert',
+            data: data,
+            timestamp: new Date(),
+            message: `Security alert: ${data.message}`,
+            priority: 'high'
+          })
+        },
+        'system_notification': (data) => {
+          callback({
+            type: 'system_notification',
+            data: data,
+            timestamp: new Date(),
+            message: data.message
+          })
+        }
+      }
+
+      // Register all event handlers
+      Object.entries(eventHandlers).forEach(([event, handler]) => {
+        this.socket.on(event, handler)
+      })
+
+      // Return cleanup function
+      return () => {
+        if (this.socket) {
+          Object.keys(eventHandlers).forEach(event => {
+            this.socket.off(event)
+          })
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to initialize real-time updates:', error)
+      // Fallback: return empty cleanup function
+      return () => {}
+    }
+  }
+
+  // Disconnect real-time updates
+  disconnectRealTime() {
+    if (this.socket) {
+      this.socket.disconnect()
+      this.socket = null
+      console.log('🔌 Real-time connection closed')
+    }
+  }
+
+  // Emit real-time events (for admin actions)
+  emitUpdate(eventType, data) {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit(eventType, data)
+    }
+  }
+
+  // Get WebSocket URL - delegate to API client
   getWebSocketUrl() {
     return apiClient.getWebSocketUrl();
   }
@@ -588,13 +703,6 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ location, radius })
     });
-  }
-
-  // Subscribe to real-time updates (placeholder)
-  subscribeToUpdates(callback) {
-    // TODO: Implement WebSocket or SSE for real-time updates
-    console.log('Real-time updates not yet implemented');
-    return callback;
   }
 
   // === INVITE-BASED REGISTRATION (NEW) ===

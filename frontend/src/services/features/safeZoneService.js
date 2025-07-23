@@ -189,7 +189,14 @@ class SafeZoneService {
     try {
       const [safeZones, reports, analytics] = await Promise.allSettled([
         this.getNearbySafeZones(lat, lng, radius),
-        apiClient.request('/reports'), // TODO: Add location filtering when backend supports it
+        apiClient.request('/reports', {
+          params: {
+            lat,
+            lng,
+            radius,
+            limit: 100
+          }
+        }),
         this.getSafeZoneAnalytics()
       ]);
 
