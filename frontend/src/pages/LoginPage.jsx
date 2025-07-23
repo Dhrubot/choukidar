@@ -7,8 +7,7 @@ import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Shield, ArrowLeft, Globe, AlertTriangle, Lock } from 'lucide-react';
 import AdminLogin from '../components/Auth/AdminLogin';
-import { useAuth } from '../contexts/AuthContext';
-import { useUserType } from '../contexts/UserTypeContext';
+import { useAuth } from '../contexts/AuthContext'; // Single import for enhanced context
 
 /**
  * LoginPage Component
@@ -18,19 +17,18 @@ import { useUserType } from '../contexts/UserTypeContext';
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, adminUser } = useAuth();
-  const { userType } = useUserType();
+  const { isAuthenticated, isAdmin, user: adminUser } = useAuth(); // Simplified to single hook
   
   // Get redirect path from location state or default to admin
   const redirectTo = location.state?.from?.pathname || '/admin';
   
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated && userType === 'admin') {
+    if (isAuthenticated && isAdmin) {
       console.log('✅ Already authenticated, redirecting to:', redirectTo);
       navigate(redirectTo, { replace: true });
     }
-  }, [isAuthenticated, userType, redirectTo, navigate]);
+  }, [isAuthenticated, isAdmin, redirectTo, navigate]);
   
   // Handle successful login
   const handleLoginSuccess = (user) => {

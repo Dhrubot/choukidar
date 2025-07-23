@@ -1,7 +1,7 @@
 // === frontend/src/components/Auth/AdminLogin.jsx ===
 // Admin Login Component for SafeStreets Bangladesh
 // Follows existing component patterns and styling conventions
-// Integrates with AuthContext for secure admin authentication
+// Integrates with Enhanced AuthContext for secure admin authentication
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { 
@@ -18,8 +18,8 @@ import {
   Clock,
   Settings
 } from 'lucide-react';
-import { useAuth, useAdminAuth } from '../../contexts/AuthContext';
-import { useUserType } from '../../contexts/UserTypeContext'; // Keep this import
+import { useAuth } from '../../contexts/AuthContext'; // Single import for enhanced context
+import { useDevice } from '../../contexts/DeviceContext'; // Updated import for device fingerprint
 
 /**
  * AdminLogin Component
@@ -34,22 +34,22 @@ const AdminLogin = ({
   showTitle = true,
   embedded = false
 }) => {
-  // Auth context hooks
+  // Enhanced AuthContext hooks - single source of truth
   const { 
     isAuthenticated, 
     isLoading, 
     loginAdmin, 
-    adminUser, 
-    adminSecurityContext,
+    user: adminUser, 
+    securityContext: adminSecurityContext,
     loginError,
     error,
-    isAccountLocked,
-    isAuthenticating,
+    authState,
+    AUTH_STATES,
     clearErrors
-  } = useAdminAuth();
+  } = useAuth();
   
-  // User type context for device fingerprinting
-  const { deviceFingerprint } = useUserType(); // Get device fingerprint here
+  // Device fingerprint from DeviceContext
+  const { deviceFingerprint } = useDevice();
   
   // Form state
   const [formData, setFormData] = useState({
@@ -64,6 +64,10 @@ const AdminLogin = ({
   // UI state
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  
+  // Computed states from enhanced AuthContext
+  const isAccountLocked = adminSecurityContext?.accountLocked || false;
+  const isAuthenticating = authState === AUTH_STATES.AUTHENTICATING;
   
   // Form validation
   const validateForm = useCallback(() => {
@@ -117,15 +121,12 @@ const AdminLogin = ({
     }
     
     try {
-      // Pass deviceFingerprint as the second argument to loginAdmin
-      const result = await loginAdmin(
-        {
-          username: formData.username.trim(),
-          password: formData.password,
-          rememberMe: rememberMe,
-        },
-        deviceFingerprint // Pass deviceFingerprint here
-      );
+      // Use the enhanced loginAdmin from AuthContext
+      const result = await loginAdmin({
+        username: formData.username.trim(),
+        password: formData.password,
+        rememberMe: rememberMe,
+      });
       
       if (result.success) {
         console.log('✅ Admin login successful');
@@ -156,7 +157,7 @@ const AdminLogin = ({
         onLoginError('Login failed. Please try again.');
       }
     }
-  }, [formData, rememberMe, deviceFingerprint, validateForm, loginAdmin, onLoginSuccess, onLoginError]);
+  }, [formData, rememberMe, validateForm, loginAdmin, onLoginSuccess, onLoginError]);
   
   // Handle password visibility toggle
   const togglePasswordVisibility = useCallback(() => {
@@ -420,16 +421,16 @@ const AdminLogin = ({
       
       {/* Login Attempts Warning */}
       {adminSecurityContext?.loginAttempts > 0 && (
-          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-center space-x-2 text-yellow-700">
-              <AlertTriangle className="w-4 h-4" />
-              <span className="text-sm">
-                {adminSecurityContext.loginAttempts} failed attempt{adminSecurityContext.loginAttempts !== 1 ? 's' : ''}. 
-                {5 - adminSecurityContext.loginAttempts} remaining before account lock.
-              </span>
-            </div>
+        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center space-x-2 text-yellow-700">
+            <AlertTriangle className="w-4 h-4" />
+            <span className="text-sm">
+              {adminSecurityContext.loginAttempts} failed attempt{adminSecurityContext.loginAttempts !== 1 ? 's' : ''}. 
+              {5 - adminSecurityContext.loginAttempts} remaining before account lock.
+            </span>
           </div>
-        )}
+        </div>
+      )}
       
       {/* Footer */}
       <div className="mt-8 text-center text-sm text-neutral-600">

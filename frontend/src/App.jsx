@@ -15,39 +15,42 @@ import InviteRegisterPage from './pages/InviteRegisterPage'
 import Header from './components/Common/Header'
 import Footer from './components/Common/Footer'
 import ProtectedRoute, { AdminProtectedRoute } from './components/Layout/ProtectedRoute'
+import { DeviceProvider } from './contexts/DeviceContext'
 
 function App() {
   return (
-    // Corrected nesting order: AuthProvider wraps UserTypeProvider
-    <AuthProvider>
-      <UserTypeProvider>
-        <Router>
-          <div className="min-h-screen bg-neutral-50 flex flex-col">
-            <Header />
-            <main className="flex-1">
-              <Routes>
-                {/* Public Routes */}
-                <Route path="/" element={<Home />} />
-                <Route path="/map" element={<MapPage />} />
-                <Route path="/report" element={<ReportPage />} />
-                {/* Invite-based Registration Route (Publicly accessible with token) */}
-                <Route path="/register" element={<InviteRegisterPage />} />
+    // Corrected nesting order: AuthProvider wraps UserTypeProvider and DeviceProvider
+    // wraps everything since auth uses fingerprint from devices
+    <DeviceProvider>
+      <AuthProvider>
+        <UserTypeProvider>
+          <Router>
+            <div className="min-h-screen bg-neutral-50 flex flex-col">
+              <Header />
+              <main className="flex-1">
+                <Routes>
+                  {/* Public Routes */}
+                  <Route path="/" element={<Home />} />
+                  <Route path="/map" element={<MapPage />} />
+                  <Route path="/report" element={<ReportPage />} />
+                  {/* Invite-based Registration Route (Publicly accessible with token) */}
+                  <Route path="/register" element={<InviteRegisterPage />} />
 
-                {/* Admin Authentication Route */}
-                <Route path="/admin/login" element={<LoginPage />} />
+                  {/* Admin Authentication Route */}
+                  <Route path="/admin/login" element={<LoginPage />} />
 
-                {/* Protected Admin Route */}
-                <Route
-                  path="/admin"
-                  element={
-                    <AdminProtectedRoute>
-                      <AdminPage />
-                    </AdminProtectedRoute>
-                  }
-                />
+                  {/* Protected Admin Route */}
+                  <Route
+                    path="/admin"
+                    element={
+                      <AdminProtectedRoute>
+                        <AdminPage />
+                      </AdminProtectedRoute>
+                    }
+                  />
 
-                {/* Future Protected Routes - Ready for expansion */}
-                {/* <Route 
+                  {/* Future Protected Routes - Ready for expansion */}
+                  {/* <Route 
                   path="/admin/security" 
                   element={
                     <AdminProtectedRoute requiredPermission="security_monitoring">
@@ -64,13 +67,14 @@ function App() {
                   } 
                 />
                 */}
-              </Routes>
-            </main>
-            <Footer />
-          </div>
-        </Router>
-      </UserTypeProvider>
-    </AuthProvider>
+                </Routes>
+              </main>
+              <Footer />
+            </div>
+          </Router>
+        </UserTypeProvider>
+      </AuthProvider>
+    </DeviceProvider>
   )
 }
 

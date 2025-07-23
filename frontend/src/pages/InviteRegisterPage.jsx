@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { User, Lock, Mail, Shield, AlertTriangle, Loader2, CheckCircle } from 'lucide-react';
 import apiService from '../services/api';
-import { useUserType } from '../contexts/UserTypeContext'; // To get device fingerprint
+import { useDevice } from '../contexts/DeviceContext'; // Updated import for device fingerprint
 
 /**
  * InviteRegisterPage Component
@@ -15,7 +15,7 @@ const InviteRegisterPage = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token'); // Get token from URL query params
 
-  const { deviceFingerprint, loading: userTypeLoading } = useUserType(); // Get device fingerprint
+  const { deviceFingerprint } = useDevice(); // Get device fingerprint from DeviceContext
   
   const [formData, setFormData] = useState({
     username: '',
@@ -26,7 +26,7 @@ const InviteRegisterPage = () => {
     // e.g., badgeNumber: '', department: '', institution: '', researchArea: ''
   });
   const [formErrors, setFormErrors] = useState({});
-  const [loading, setLoading] = useState(true); // Initial loading for token validation/userType context
+  const [loading, setLoading] = useState(true); // Initial loading for token validation
   const [submitting, setSubmitting] = useState(false); // For form submission
   const [message, setMessage] = useState({ type: '', text: '' });
   const [inviteDetails, setInviteDetails] = useState(null); // To store details from the token
@@ -41,8 +41,8 @@ const InviteRegisterPage = () => {
       }
 
       // Ensure device fingerprint is loaded before attempting token validation
-      if (userTypeLoading) {
-        return; // Wait for userTypeLoading to be false
+      if (!deviceFingerprint) {
+        return; // Wait for deviceFingerprint to be available
       }
 
       try {
@@ -68,7 +68,7 @@ const InviteRegisterPage = () => {
     };
 
     validateTokenAndFetchDetails();
-  }, [token, userTypeLoading]); // Rerun when token or userTypeLoading changes
+  }, [token, deviceFingerprint]); // Rerun when token or deviceFingerprint changes
 
   const validateForm = useCallback(() => {
     const errors = {};
@@ -153,7 +153,7 @@ const InviteRegisterPage = () => {
     }
   };
 
-  if (loading || userTypeLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50">
         <div className="text-center p-8">
@@ -365,7 +365,6 @@ const InviteRegisterPage = () => {
                 </div>
               </>
             )}
-
 
             <button
               type="submit"

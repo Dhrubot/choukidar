@@ -2,17 +2,17 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Menu, X, Shield } from 'lucide-react'
-import { useAdminAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext'; // Single import for enhanced context
 
 function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const location = useLocation()
-  const { isAuthenticated, adminUser } = useAdminAuth();
+  const { isAuthenticated, isAdmin, user: adminUser } = useAuth(); // Simplified to single hook
 
   const isActive = (path) => location.pathname === path
 
-   // Determine if the user is an authenticated admin
-  const isAdminAuthenticated = isAuthenticated && adminUser;
+  // Determine if the user is an authenticated admin
+  const isAdminAuthenticated = isAuthenticated && isAdmin;
 
   return (
     <header className="bg-white/95 backdrop-blur-sm shadow-soft sticky top-0 z-50 border-b border-neutral-200">
@@ -61,16 +61,18 @@ function Header() {
             >
               Report
             </Link>
-            { isAdminAuthenticated && <Link 
-              to="/admin" 
-              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                isActive('/admin') 
-                  ? 'bg-neutral-800 text-white shadow-sm' 
-                  : 'text-neutral-600 hover:text-neutral-800 hover:bg-neutral-100'
-              }`}
-            >
-              Admin
-            </Link>}
+            {isAdminAuthenticated && (
+              <Link 
+                to="/admin" 
+                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  isActive('/admin') 
+                    ? 'bg-neutral-800 text-white shadow-sm' 
+                    : 'text-neutral-600 hover:text-neutral-800 hover:bg-neutral-100'
+                }`}
+              >
+                Admin
+              </Link>
+            )}
           </nav>
 
           {/* Mobile menu button */}
@@ -123,17 +125,19 @@ function Header() {
               >
                 Report
               </Link>
-              { isAdminAuthenticated && <Link 
-                to="/admin" 
-                className={`px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
-                  isActive('/admin') 
-                    ? 'bg-neutral-800 text-white' 
-                    : 'text-neutral-600 hover:bg-neutral-100'
-                }`}
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Admin
-              </Link>}
+              {isAdminAuthenticated && (
+                <Link 
+                  to="/admin" 
+                  className={`px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
+                    isActive('/admin') 
+                      ? 'bg-neutral-800 text-white' 
+                      : 'text-neutral-600 hover:bg-neutral-100'
+                  }`}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Admin
+                </Link>
+              )}
             </nav>
           </div>
         )}

@@ -1,13 +1,12 @@
 // === frontend/src/components/Layout/ProtectedRoute.jsx ===
 // Route Protection Component for SafeStreets Bangladesh
 // Handles authentication-based route protection with role verification
-// Integrates with AuthContext and UserTypeContext for complete security
+// Integrates with Enhanced AuthContext for complete security
 
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Shield, Lock, Loader2, AlertTriangle, Clock } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useUserType } from '../../contexts/UserTypeContext';
+import { useAuth } from '../../contexts/AuthContext'; // Single import for enhanced context
 
 /**
  * ProtectedRoute Component
@@ -22,12 +21,22 @@ const ProtectedRoute = ({
   fallbackComponent = null,
   showLoading = true
 }) => {
-  const { isAuthenticated, isLoading: authLoading, adminUser, hasAdminPermission } = useAuth();
-  const { userType, loading: userTypeLoading, isQuarantined } = useUserType();
+  const { 
+    isAuthenticated, 
+    isLoading, 
+    user, 
+    userType, 
+    hasPermission, 
+    securityContext 
+  } = useAuth(); // Single hook usage for all auth state
+  
   const location = useLocation();
 
+  // Check if user is quarantined using securityContext
+  const isQuarantined = securityContext?.quarantined || false;
+
   // Show loading while authentication is being determined
-  if ((authLoading || userTypeLoading) && showLoading) {
+  if (isLoading && showLoading) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-center p-8">
@@ -49,7 +58,7 @@ const ProtectedRoute = ({
   }
 
   // Check if user is quarantined (security feature)
-  if (isQuarantined && isQuarantined()) {
+  if (isQuarantined) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-center p-8 max-w-md">
@@ -140,7 +149,7 @@ const ProtectedRoute = ({
 
   // Check permission-based access for admin users
   if (isAuthenticated && requiredRole === 'admin' && requiredPermission) {
-    if (!hasAdminPermission || !hasAdminPermission(requiredPermission)) {
+    if (!hasPermission(requiredPermission)) {
       console.log(`🔒 Access denied - Missing permission: ${requiredPermission}`);
       
       return (
@@ -159,7 +168,7 @@ const ProtectedRoute = ({
             </p>
             <div className="text-sm text-neutral-500 space-y-1">
               <p>Required permission: <span className="font-medium">{requiredPermission}</span></p>
-              <p>Admin level: <span className="font-medium">{adminUser?.adminLevel || 'Unknown'}</span></p>
+              <p>Admin level: <span className="font-medium">{user?.adminLevel || 'Unknown'}</span></p>
             </div>
             <button
               onClick={() => window.history.back()}

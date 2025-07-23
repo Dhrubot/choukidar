@@ -1,7 +1,7 @@
 // === frontend/src/components/Layout/RoleBasedRouter.jsx ===
 // Role-Based Router Component for SafeStreets Bangladesh
 // Handles authentication-aware routing and role-based access control
-// Integrates with existing UserTypeContext and AuthContext
+// Integrates with Enhanced AuthContext for unified authentication management
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
@@ -17,8 +17,7 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
-import { useUserType } from '../../contexts/UserTypeContext';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext'; // Single import for enhanced context
 import AdminLogin from '../Auth/AdminLogin';
 
 /**
@@ -260,14 +259,24 @@ const AdminLoginPage = ({ redirectTo = '/admin' }) => {
  * Determines if user has access to a route
  */
 const useRouteProtection = (path) => {
-  const { userType, isQuarantined, hasPermission } = useUserType();
   const { 
+    userType, 
     isAuthenticated, 
     isLoading, 
-    isAccountLocked, 
-    isSessionExpired,
-    hasAdminPermission 
-  } = useAuth();
+    hasPermission, 
+    securityContext,
+    authState,
+    AUTH_STATES
+  } = useAuth(); // Single hook usage for all auth state
+  
+  // Check if user is quarantined from securityContext
+  const isQuarantined = securityContext?.quarantined || false;
+  
+  // Check if account is locked from securityContext
+  const isAccountLocked = securityContext?.accountLocked || false;
+  
+  // Check if session is expired from authState
+  const isSessionExpired = authState === AUTH_STATES.SESSION_EXPIRED;
   
   const checkRouteAccess = useCallback(() => {
     // Find the most specific route configuration
@@ -291,7 +300,7 @@ const useRouteProtection = (path) => {
     const protectionLevel = getRouteConfig(path);
     
     // Check quarantine status first (applies to all protected routes)
-    if (protectionLevel !== PROTECTION_LEVELS.PUBLIC && isQuarantined()) {
+    if (protectionLevel !== PROTECTION_LEVELS.PUBLIC && isQuarantined) {
       return {
         allowed: false,
         reason: 'quarantined',
@@ -343,7 +352,7 @@ const useRouteProtection = (path) => {
         
         // Check specific admin permission for the route
         const requiredPermission = ADMIN_ROUTE_PERMISSIONS[path];
-        if (requiredPermission && !hasAdminPermission(requiredPermission)) {
+        if (requiredPermission && !hasPermission(requiredPermission)) {
           return {
             allowed: false,
             reason: 'insufficient_permission',
@@ -386,8 +395,7 @@ const useRouteProtection = (path) => {
     isAccountLocked, 
     isSessionExpired,
     isQuarantined, 
-    hasPermission, 
-    hasAdminPermission
+    hasPermission
   ]);
   
   return {
@@ -448,12 +456,11 @@ const ProtectedRoute = ({ children, path = null }) => {
  * Main export - wraps the entire routing system with role-based protection
  */
 const RoleBasedRouter = ({ children }) => {
-  const { userType, loading: userTypeLoading } = useUserType();
-  const { isLoading: authLoading } = useAuth();
+  const { userType, isLoading } = useAuth(); // Single hook usage
   const location = useLocation();
   
   // Show loading while contexts are initializing
-  if (userTypeLoading || authLoading) {
+  if (isLoading) {
     return <AuthenticationLoading />;
   }
   
@@ -474,14 +481,16 @@ const RoleBasedRouter = ({ children }) => {
  * For programmatic route access checking
  */
 export const useRouteGuard = () => {
-  const { hasPermission, userType, isQuarantined } = useUserType();
-  const { isAuthenticated, hasAdminPermission } = useAuth();
+  const { hasPermission, userType, isAuthenticated, securityContext } = useAuth();
+  
+  // Check if user is quarantined from securityContext
+  const isQuarantined = securityContext?.quarantined || false;
   
   const canAccess = useCallback((path, permission = null) => {
     const protectionLevel = ROUTE_PROTECTION_CONFIG[path] || PROTECTION_LEVELS.PUBLIC;
     
     // Check quarantine status
-    if (protectionLevel !== PROTECTION_LEVELS.PUBLIC && isQuarantined()) {
+    if (protectionLevel !== PROTECTION_LEVELS.PUBLIC && isQuarantined) {
       return false;
     }
     
@@ -492,7 +501,7 @@ export const useRouteGuard = () => {
         return isAuthenticated;
       case PROTECTION_LEVELS.ADMIN:
         return isAuthenticated && userType === 'admin' && 
-               (!permission || hasAdminPermission(permission));
+               (!permission || hasPermission(permission));
       case PROTECTION_LEVELS.POLICE:
         return isAuthenticated && userType === 'police';
       case PROTECTION_LEVELS.RESEARCHER:
@@ -500,7 +509,7 @@ export const useRouteGuard = () => {
       default:
         return false;
     }
-  }, [userType, isAuthenticated, isQuarantined, hasPermission, hasAdminPermission]);
+  }, [userType, isAuthenticated, isQuarantined, hasPermission]);
   
   return { canAccess };
 };

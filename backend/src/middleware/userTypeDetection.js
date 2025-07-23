@@ -27,8 +27,8 @@ const userTypeDetection = async (req, res, next) => {
 
     // Extract device fingerprint from headers or body
     const deviceFingerprintId = req.headers['x-device-fingerprint'] ||
-                               req.body.deviceFingerprint ||
-                               req.query.deviceFingerprint;
+                               req.body?.deviceFingerprint ||
+                               req.query?.deviceFingerprint;
     
     // Extract admin session token from Authorization header or cookies
     const adminToken = req.headers['authorization']?.replace('Bearer ', '') ||

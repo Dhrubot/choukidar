@@ -10,14 +10,20 @@ import {
   Lock, Globe, User, Calendar, ExternalLink, CheckCircle
 } from 'lucide-react'
 import { useSubmitReport } from '../hooks/useReports'
-import { useUserType } from '../contexts/UserTypeContext'
+import { useAuth } from '../contexts/AuthContext' // Single import for enhanced context
+import { useDevice } from '../contexts/DeviceContext' // Updated import for device fingerprint
 import LocationPicker from '../components/LocationPicker/LocationPicker'
 import { isWithinBangladesh } from '../config/locationConfig'
 
 function ReportPage() {
   const navigate = useNavigate()
   const { submitReport, submitting, success, error, reset } = useSubmitReport()
-  const { deviceFingerprint, userType, preferences } = useUserType()
+  const { deviceFingerprint, userType, preferences } = useDevice() // Get device fingerprint from DeviceContext
+  const { userType: authUserType, preferences: authPreferences } = useAuth() // Get user type and preferences from AuthContext
+  
+  // Use authContext data as primary, fallback to device context if needed
+  const currentUserType = authUserType || userType
+  const currentPreferences = authPreferences || preferences
   
   // Form state
   const [formData, setFormData] = useState({
@@ -65,6 +71,13 @@ function ReportPage() {
       )
     }
   }, [])
+
+  // Initialize female safety mode from preferences
+  useEffect(() => {
+    if (currentPreferences?.femaleSafetyMode) {
+      setShowFemaleSafetyMode(currentPreferences.femaleSafetyMode)
+    }
+  }, [currentPreferences])
 
   // Handle location selection from LocationPicker
   const handleLocationSelect = (locationData) => {

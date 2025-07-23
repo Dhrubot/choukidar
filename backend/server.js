@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http'); // Import http module
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 const app = express();
@@ -20,6 +21,28 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// =================================================================
+// === NEW: TEMPORARY REQUEST LOGGER MIDDLEWARE ====================
+// =================================================================
+app.use((req, res, next) => {
+  // We only care about API calls, not static assets if you were serving them
+  if (req.path.startsWith('/api')) {
+    console.log('--- Incoming Request ---');
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    
+    // Only log body if it exists
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log('Body:', JSON.stringify(req.body, null, 2));
+    } else {
+      console.log('Body: [Empty]');
+    }
+    
+    console.log('------------------------');
+  }
+  next(); // IMPORTANT: Always call next() to pass the request along
+});
 
 // ENHANCED: Security middleware - Apply device fingerprinting and user context to all requests
 // This middleware must come BEFORE route definitions to ensure user context is available

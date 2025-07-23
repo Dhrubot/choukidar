@@ -1,524 +1,453 @@
 // === frontend/src/contexts/AuthContext.jsx ===
-// Admin Authentication Context for SafeStreets Bangladesh
-// Handles admin-specific authentication state and session management
-// Works in conjunction with UserTypeContext for complete user management
-
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import apiService from '../services/api';
-// REMOVED: import { useUserType } from './UserTypeContext'; // AuthContext should not directly depend on UserTypeContext
+import { useDevice } from './DeviceContext';
 
-// Admin authentication states
+// --- User Types ---
+const USER_TYPES = {
+  ANONYMOUS: 'anonymous',
+  ADMIN: 'admin',
+  POLICE: 'police',
+  RESEARCHER: 'researcher'
+};
+
+// --- Authentication States ---
 const AUTH_STATES = {
   UNAUTHENTICATED: 'unauthenticated',
   AUTHENTICATING: 'authenticating',
   AUTHENTICATED: 'authenticated',
   SESSION_EXPIRED: 'session_expired',
-  LOCKED: 'locked',
   ERROR: 'error'
 };
 
-// Initial state for admin authentication
+// --- Initial State ---
 const initialState = {
-  // Authentication status
-  authState: AUTH_STATES.UNAUTHENTICATED,
+  // Core authentication
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true,
+  authState: AUTH_STATES.UNAUTHENTICATED,
   
-  // Admin user data
-  adminUser: null,
-  adminProfile: null,
+  // User data
+  user: null,
+  userId: null,
+  userType: USER_TYPES.ANONYMOUS,
   
   // Session management
   sessionToken: null,
   sessionExpiry: null,
-  lastActivity: null,
+  lastActivity: Date.now(),
   
-  // Admin permissions and role
-  adminPermissions: [],
-  adminLevel: 1,
-  adminRole: null,
+  // Authorization
+  permissions: ['view_map', 'submit_report', 'validate_reports'],
   
-  // Security context for admin
-  adminSecurityContext: {
-    trustScore: 0,
-    riskLevel: 'unknown',
-    loginAttempts: 0,
-    accountLocked: false,
-    lockUntil: null,
-    lastLogin: null,
-    associatedDevices: 0,
-    twoFactorEnabled: false
+  // Security context
+  securityContext: {
+    trustScore: 50,
+    riskLevel: 'medium',
+    quarantined: false,
+    deviceTrusted: false,
+    loginAttempts: 0
   },
   
-  // Admin preferences
-  adminPreferences: {
-    theme: 'light',
+  // Preferences (from your original)
+  preferences: {
     language: 'en',
-    notifications: {
-      email: true,
-      push: true,
-      security: true,
-      reports: true
-    },
-    dashboard: {
-      defaultView: 'overview',
-      autoRefresh: true,
-      refreshInterval: 30000
-    },
-    moderation: {
-      itemsPerPage: 25,
-      sortBy: 'createdAt',
-      sortOrder: 'desc',
-      showOnlyPending: false
+    theme: 'light',
+    femaleSafetyMode: false,
+    mapSettings: {
+      defaultView: 'clusters',
+      showSafeZones: true,
+      showFemaleIncidents: true
     }
   },
   
   // Error handling
   error: null,
   loginError: null,
-  
-  // Activity tracking
-  activityProfile: {
-    totalSessions: 0,
-    totalActiveTime: 0,
-    featureUsage: {
-      moderation: 0,
-      analytics: 0,
-      userManagement: 0,
-      safeZones: 0,
-      security: 0
-    }
-  }
 };
 
-// Action types for admin authentication
+// --- Action Types ---
 const ActionTypes = {
-  SET_LOADING: 'SET_LOADING',
-  SET_ERROR: 'SET_ERROR',
-  SET_LOGIN_ERROR: 'SET_LOGIN_ERROR',
+  INIT_START: 'INIT_START',
+  INIT_SUCCESS: 'INIT_SUCCESS',
+  INIT_FAILURE: 'INIT_FAILURE',
+  
   LOGIN_START: 'LOGIN_START',
   LOGIN_SUCCESS: 'LOGIN_SUCCESS',
   LOGIN_FAILURE: 'LOGIN_FAILURE',
+  
+  LOGOUT_SUCCESS: 'LOGOUT_SUCCESS',
   SESSION_EXPIRED: 'SESSION_EXPIRED',
-  LOGOUT: 'LOGOUT',
-  LOAD_PROFILE: 'LOAD_PROFILE',
-  UPDATE_PROFILE: 'UPDATE_PROFILE',
+  
   UPDATE_PREFERENCES: 'UPDATE_PREFERENCES',
-  UPDATE_SECURITY_CONTEXT: 'UPDATE_SECURITY_CONTEXT',
   UPDATE_ACTIVITY: 'UPDATE_ACTIVITY',
-  REFRESH_SESSION: 'REFRESH_SESSION',
-  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
   CLEAR_ERRORS: 'CLEAR_ERRORS',
-  RESET_STATE: 'RESET_STATE'
 };
 
-// Reducer for admin authentication state
+// --- Reducer ---
 const authReducer = (state, action) => {
   switch (action.type) {
-    case ActionTypes.SET_LOADING:
+    case ActionTypes.INIT_START:
+      return { 
+        ...state, 
+        isLoading: true, 
+        error: null,
+        authState: AUTH_STATES.UNAUTHENTICATED
+      };
+    
+    case ActionTypes.INIT_SUCCESS:
       return {
         ...state,
-        isLoading: action.payload,
-        error: action.payload ? null : state.error
+        isLoading: false,
+        isAuthenticated: action.payload.userType !== USER_TYPES.ANONYMOUS,
+        authState: action.payload.userType !== USER_TYPES.ANONYMOUS 
+          ? AUTH_STATES.AUTHENTICATED 
+          : AUTH_STATES.UNAUTHENTICATED,
+        user: action.payload.user,
+        userId: action.payload.userId,
+        userType: action.payload.userType,
+        permissions: action.payload.permissions,
+        securityContext: {
+          ...state.securityContext,
+          ...action.payload.securityContext
+        },
+        preferences: action.payload.preferences || state.preferences,
+        sessionToken: action.payload.sessionToken,
+        sessionExpiry: action.payload.sessionExpiry,
+        lastActivity: Date.now(),
       };
-      
-    case ActionTypes.SET_ERROR:
-      return {
-        ...state,
-        error: action.payload,
-        isLoading: false
-      };
-      
-    case ActionTypes.SET_LOGIN_ERROR:
-      return {
-        ...state,
-        loginError: action.payload,
-        isLoading: false
-      };
-      
+
     case ActionTypes.LOGIN_START:
-      return {
-        ...state,
+      return { 
+        ...state, 
+        isLoading: true, 
         authState: AUTH_STATES.AUTHENTICATING,
-        isLoading: true,
-        loginError: null,
-        error: null
+        error: null,
+        loginError: null
       };
-      
+
     case ActionTypes.LOGIN_SUCCESS:
       return {
         ...state,
-        authState: AUTH_STATES.AUTHENTICATED,
-        isAuthenticated: true,
         isLoading: false,
-        adminUser: action.payload.user,
-        adminProfile: action.payload.profile,
+        isAuthenticated: true,
+        authState: AUTH_STATES.AUTHENTICATED,
+        user: action.payload.user,
+        userId: action.payload.user.id,
+        userType: action.payload.userType,
+        permissions: action.payload.permissions,
+        securityContext: {
+          ...state.securityContext,
+          ...action.payload.securityContext,
+          loginAttempts: 0 // Reset on successful login
+        },
         sessionToken: action.payload.token,
         sessionExpiry: action.payload.sessionExpiry,
-        lastActivity: new Date(),
-        adminPermissions: action.payload.permissions || [],
-        adminLevel: action.payload.adminLevel || 1,
-        adminRole: action.payload.role || 'admin',
-        adminSecurityContext: {
-          ...state.adminSecurityContext,
-          ...action.payload.securityContext,
-          loginAttempts: 0,
-          accountLocked: false,
-          lastLogin: new Date()
-        },
-        activityProfile: {
-          ...state.activityProfile,
-          totalSessions: state.activityProfile.totalSessions + 1
-        },
+        preferences: action.payload.preferences || state.preferences,
+        lastActivity: Date.now(),
+        error: null,
         loginError: null,
-        error: null
       };
-      
+    
     case ActionTypes.LOGIN_FAILURE:
       return {
         ...state,
-        authState: AUTH_STATES.ERROR,
-        isAuthenticated: false,
         isLoading: false,
+        authState: AUTH_STATES.ERROR,
         loginError: action.payload.message,
-        adminSecurityContext: {
-          ...state.adminSecurityContext,
-          loginAttempts: action.payload.loginAttempts || 0,
-          accountLocked: action.payload.accountLocked || false,
-          lockUntil: action.payload.lockUntil || null
+        securityContext: {
+          ...state.securityContext,
+          loginAttempts: action.payload.loginAttempts || 0
         }
       };
-      
+
+    case ActionTypes.INIT_FAILURE:
+      return {
+        ...state,
+        isLoading: false,
+        authState: AUTH_STATES.ERROR,
+        error: action.payload,
+        // Fallback to basic anonymous state
+        userType: USER_TYPES.ANONYMOUS,
+        permissions: ['view_map', 'submit_report'],
+        securityContext: {
+          trustScore: 25,
+          riskLevel: 'medium',
+          quarantined: false,
+          deviceTrusted: false,
+          loginAttempts: 0
+        }
+      };
+
     case ActionTypes.SESSION_EXPIRED:
       return {
         ...state,
-        authState: AUTH_STATES.SESSION_EXPIRED,
         isAuthenticated: false,
+        authState: AUTH_STATES.SESSION_EXPIRED,
         sessionToken: null,
         sessionExpiry: null,
+        user: null,
+        userId: null,
+        userType: USER_TYPES.ANONYMOUS,
+        permissions: ['view_map', 'submit_report'],
         error: 'Session expired. Please login again.'
       };
-      
-    case ActionTypes.LOGOUT:
+
+    case ActionTypes.LOGOUT_SUCCESS:
       return {
         ...initialState,
-        authState: AUTH_STATES.UNAUTHENTICATED,
         isLoading: false,
-        // Preserve some settings
-        adminPreferences: state.adminPreferences
-      };
-      
-    case ActionTypes.LOAD_PROFILE:
-      return {
-        ...state,
-        adminProfile: action.payload.profile,
-        adminSecurityContext: {
-          ...state.adminSecurityContext,
-          ...action.payload.securityContext
-        },
-        activityProfile: {
-          ...state.activityProfile,
-          ...action.payload.activityProfile
+        authState: AUTH_STATES.UNAUTHENTICATED,
+        // Preserve device-specific preferences
+        preferences: {
+          ...initialState.preferences,
+          language: state.preferences.language,
+          theme: state.preferences.theme
         }
       };
-      
-    case ActionTypes.UPDATE_PROFILE:
-      return {
-        ...state,
-        adminProfile: {
-          ...state.adminProfile,
-          ...action.payload
-        }
-      };
-      
+
     case ActionTypes.UPDATE_PREFERENCES:
       return {
         ...state,
-        adminPreferences: {
-          ...state.adminPreferences,
-          ...action.payload
-        }
+        preferences: { ...state.preferences, ...action.payload }
       };
-      
-    case ActionTypes.UPDATE_SECURITY_CONTEXT:
-      return {
-        ...state,
-        adminSecurityContext: {
-          ...state.adminSecurityContext,
-          ...action.payload
-        }
-      };
-      
+
     case ActionTypes.UPDATE_ACTIVITY:
       return {
         ...state,
-        lastActivity: new Date(),
-        activityProfile: {
-          ...state.activityProfile,
-          totalActiveTime: state.activityProfile.totalActiveTime + 1
-        }
+        lastActivity: Date.now()
       };
-      
-    case ActionTypes.REFRESH_SESSION:
-      return {
-        ...state,
-        sessionExpiry: action.payload.sessionExpiry,
-        lastActivity: new Date()
-      };
-      
-    case ActionTypes.ACCOUNT_LOCKED:
-      return {
-        ...state,
-        authState: AUTH_STATES.LOCKED,
-        isAuthenticated: false,
-        adminSecurityContext: {
-          ...state.adminSecurityContext,
-          accountLocked: true,
-          lockUntil: action.payload.lockUntil
-        },
-        error: action.payload.message
-      };
-      
+
     case ActionTypes.CLEAR_ERRORS:
       return {
         ...state,
         error: null,
         loginError: null
       };
-      
-    case ActionTypes.RESET_STATE:
-      return {
-        ...initialState,
-        adminPreferences: state.adminPreferences
-      };
-      
+
     default:
       return state;
   }
 };
 
-// Create the AuthContext
 const AuthContext = createContext();
 
-// AuthProvider component
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
-  // REMOVED: const { deviceFingerprint, userType } = useUserType(); // This line caused the error
+  const { deviceFingerprint } = useDevice();
 
-  // Admin login function
-  const loginAdmin = useCallback(async (credentials, deviceFingerprint) => { // ADDED deviceFingerprint as argument
+  const initialize = useCallback(async () => {
+    if (!deviceFingerprint) return;
+
+    dispatch({ type: ActionTypes.INIT_START });
     try {
-      dispatch({ type: ActionTypes.LOGIN_START });
-      
-      // Call API service for admin login
-      const response = await apiService.adminLogin({
-        ...credentials,
-        deviceFingerprint: deviceFingerprint // Use the passed deviceFingerprint
-      });
-      
+      // Check for existing session token first
+      const storedToken = localStorage.getItem('safestreets_admin_token');
+      if (storedToken) {
+        const sessionResponse = await apiService.verifyAdminSession();
+        if (sessionResponse.success) {
+          // Initialize as authenticated user
+          dispatch({
+            type: ActionTypes.INIT_SUCCESS,
+            payload: {
+              userType: USER_TYPES.ADMIN,
+              user: sessionResponse.user,
+              userId: sessionResponse.user.id,
+              permissions: sessionResponse.user.permissions,
+              securityContext: sessionResponse.securityContext,
+              preferences: sessionResponse.preferences,
+              sessionToken: storedToken,
+              sessionExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
+            }
+          });
+          console.log('✅ AuthContext: Restored admin session');
+          return;
+        } else {
+          localStorage.removeItem('safestreets_admin_token');
+        }
+      }
+
+      // Initialize as anonymous user
+      const response = await apiService.getUserContext(deviceFingerprint);
       if (response.success) {
-        // Store token in localStorage
+        dispatch({
+          type: ActionTypes.INIT_SUCCESS,
+          payload: {
+            userType: USER_TYPES.ANONYMOUS,
+            user: response.user,
+            userId: response.userContext.userId,
+            permissions: response.userContext.permissions,
+            securityContext: response.userContext.securityContext,
+            preferences: response.user?.preferences
+          }
+        });
+        console.log('✅ AuthContext: Initialized as anonymous user');
+      } else {
+        throw new Error(response.message || 'Failed to initialize user session.');
+      }
+    } catch (err) {
+      console.error('❌ AuthContext initialization failed:', err);
+      dispatch({ type: ActionTypes.INIT_FAILURE, payload: err.message });
+    }
+  }, [deviceFingerprint]);
+
+  // Generic login function that works for all user types
+  const login = useCallback(async (credentials, userType = USER_TYPES.ADMIN) => {
+    dispatch({ type: ActionTypes.LOGIN_START });
+    try {
+      let response;
+      
+      // Call appropriate login endpoint
+      switch (userType) {
+        case USER_TYPES.ADMIN:
+          response = await apiService.adminLogin({
+            ...credentials,
+            deviceFingerprint
+          });
+          break;
+        case USER_TYPES.POLICE:
+          response = await apiService.policeLogin({
+            ...credentials,
+            deviceFingerprint
+          });
+          break;
+        case USER_TYPES.RESEARCHER:
+          response = await apiService.researcherLogin({
+            ...credentials,
+            deviceFingerprint
+          });
+          break;
+        default:
+          throw new Error('Invalid user type');
+      }
+
+      if (response.success && response.token) {
+        // Store token (using generic key for now, could be user-type specific)
         localStorage.setItem('safestreets_admin_token', response.token);
-        
-        // Calculate session expiry (default 24 hours)
-        const sessionExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
         
         dispatch({
           type: ActionTypes.LOGIN_SUCCESS,
           payload: {
+            userType,
             user: response.user,
-            profile: response.user, // Initial profile is the user data
-            token: response.token,
-            sessionExpiry: sessionExpiry,
             permissions: response.user.permissions,
-            adminLevel: response.user.adminLevel,
-            role: response.user.role || 'admin',
-            securityContext: response.securityContext
+            securityContext: response.securityContext,
+            preferences: response.preferences,
+            token: response.token,
+            sessionExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
           }
         });
         
-        // Load full profile after login
-        await loadAdminProfile();
-        
-        console.log('✅ Admin login successful');
+        console.log(`✅ ${userType} login successful`);
         return { success: true, user: response.user };
-        
       } else {
         dispatch({
           type: ActionTypes.LOGIN_FAILURE,
           payload: {
-            message: response.message,
-            loginAttempts: response.attemptsRemaining ? (5 - response.attemptsRemaining) : 0,
-            accountLocked: response.accountLocked || false,
-            lockUntil: response.lockUntil || null
+            message: response.message || 'Login failed',
+            loginAttempts: response.loginAttempts || 0
           }
         });
-        
-        console.log('❌ Admin login failed:', response.message);
         return { success: false, message: response.message };
       }
-      
-    } catch (error) {
-      console.error('❌ Admin login error:', error);
+    } catch (err) {
+      console.error('❌ Login failed:', err);
       dispatch({
         type: ActionTypes.LOGIN_FAILURE,
-        payload: {
-          message: 'Login failed. Please try again.',
-          loginAttempts: 0,
-          accountLocked: false
-        }
+        payload: { message: 'Login failed. Please try again.' }
       });
       return { success: false, message: 'Login failed. Please try again.' };
     }
-  }, []); // Removed deviceFingerprint from dependencies as it's now an argument
-  
-  // Admin logout function
-  const logoutAdmin = useCallback(async () => {
+  }, [deviceFingerprint]);
+
+  // Convenience method for admin login
+  const loginAdmin = useCallback((credentials) => {
+    return login(credentials, USER_TYPES.ADMIN);
+  }, [login]);
+
+  const logout = useCallback(async () => {
     try {
-      // Call API service for admin logout
-      await apiService.adminLogout();
-      
-      // Clear local storage
+      // Call logout endpoint if authenticated
+      if (state.userType !== USER_TYPES.ANONYMOUS) {
+        await apiService.adminLogout();
+      }
+    } catch (error) {
+      console.error("Logout API call failed:", error);
+    } finally {
       localStorage.removeItem('safestreets_admin_token');
+      dispatch({ type: ActionTypes.LOGOUT_SUCCESS });
+      // Re-initialize as anonymous
+      await initialize();
+    }
+  }, [state.userType, initialize]);
+
+  // Update preferences
+  const updatePreferences = useCallback(async (newPreferences) => {
+    try {
+      if (state.userType !== USER_TYPES.ANONYMOUS) {
+        const response = await apiService.updateUserPreferences(newPreferences);
+        if (!response.success) {
+          throw new Error(response.message);
+        }
+      } else {
+        // Store locally for anonymous users
+        const currentPrefs = JSON.parse(localStorage.getItem('safestreets_preferences') || '{}');
+        localStorage.setItem('safestreets_preferences', JSON.stringify({
+          ...currentPrefs,
+          ...newPreferences
+        }));
+      }
       
-      // Reset state
-      dispatch({ type: ActionTypes.LOGOUT });
+      dispatch({
+        type: ActionTypes.UPDATE_PREFERENCES,
+        payload: newPreferences
+      });
       
-      console.log('✅ Admin logout successful');
       return { success: true };
-      
     } catch (error) {
-      console.error('❌ Admin logout error:', error);
-      
-      // Force logout even if API call fails
-      localStorage.removeItem('safestreets_admin_token');
-      dispatch({ type: ActionTypes.LOGOUT });
-      
-      return { success: false, message: 'Logout completed with errors' };
+      console.error('❌ Failed to update preferences:', error);
+      return { success: false, error: error.message };
     }
-  }, []);
-  
-  // Load admin profile
-  const loadAdminProfile = useCallback(async () => {
-    try {
-      const response = await apiService.getAdminProfile();
-      
-      if (response.success) {
-        dispatch({
-          type: ActionTypes.LOAD_PROFILE,
-          payload: {
-            profile: response.user,
-            securityContext: response.securityContext,
-            activityProfile: response.activityProfile
-          }
-        });
-        
-        console.log('✅ Admin profile loaded');
-        return { success: true, profile: response.user };
-      } else {
-        console.log('❌ Failed to load admin profile:', response.message);
-        return { success: false, message: response.message };
-      }
-      
-    } catch (error) {
-      console.error('❌ Admin profile load error:', error);
-      return { success: false, message: 'Failed to load profile' };
-    }
-  }, []);
-  
-  // Update admin preferences
-  const updateAdminPreferences = useCallback(async (preferences) => {
-    try {
-      const response = await apiService.updateUserPreferences(preferences);
-      
-      if (response.success) {
-        dispatch({
-          type: ActionTypes.UPDATE_PREFERENCES,
-          payload: preferences
-        });
-        
-        // Also save to localStorage for persistence
-        localStorage.setItem('safestreets_admin_preferences', JSON.stringify(preferences));
-        
-        console.log('✅ Admin preferences updated');
-        return { success: true };
-      } else {
-        console.log('❌ Failed to update preferences:', response.message);
-        return { success: false, message: response.message };
-      }
-      
-    } catch (error) {
-      console.error('❌ Admin preferences update error:', error);
-      return { success: false, message: 'Failed to update preferences' };
-    }
-  }, []);
-  
-  // Check if admin has specific permission
-  const hasAdminPermission = useCallback((permission) => {
-    return state.adminPermissions.includes(permission) || 
-           state.adminPermissions.includes('super_admin');
-  }, [state.adminPermissions]);
-  
-  // Update activity (for session management)
+  }, [state.userType]);
+
+  // Permission check
+  const hasPermission = useCallback((permission) => {
+    return state.permissions.includes('super_admin') || state.permissions.includes(permission);
+  }, [state.permissions]);
+
+  // Activity update
   const updateActivity = useCallback(() => {
     dispatch({ type: ActionTypes.UPDATE_ACTIVITY });
   }, []);
-  
+
   // Clear errors
   const clearErrors = useCallback(() => {
     dispatch({ type: ActionTypes.CLEAR_ERRORS });
   }, []);
-  
-  // Verify session on mount
+
+  // Initialize on mount
   useEffect(() => {
-    const verifySession = async () => {
-      const storedToken = localStorage.getItem('safestreets_admin_token');
-      if (storedToken && !state.isAuthenticated) {
-        try {
-          const response = await apiService.verifyAdminSession();
-          if (response.success) {
-            // Load profile if session is valid
-            await loadAdminProfile();
-          } else {
-            // Remove invalid token
-            localStorage.removeItem('safestreets_admin_token');
-            dispatch({ type: ActionTypes.SESSION_EXPIRED });
-          }
-        } catch (error) {
-          console.error('❌ Session verification failed:', error);
-          localStorage.removeItem('safestreets_admin_token');
-          dispatch({ type: ActionTypes.SESSION_EXPIRED });
-        }
-      }
-    };
-    
-    verifySession();
-  }, [state.isAuthenticated, loadAdminProfile]);
-  
-  // Load saved preferences on mount
+    initialize();
+  }, [initialize]);
+
+  // Load saved preferences for anonymous users
   useEffect(() => {
-    const savedPreferences = localStorage.getItem('safestreets_admin_preferences');
-    if (savedPreferences) {
-      try {
-        const preferences = JSON.parse(savedPreferences);
+    if (state.userType === USER_TYPES.ANONYMOUS && !state.isLoading) {
+      const savedPrefs = JSON.parse(localStorage.getItem('safestreets_preferences') || '{}');
+      if (Object.keys(savedPrefs).length > 0) {
         dispatch({
           type: ActionTypes.UPDATE_PREFERENCES,
-          payload: preferences
+          payload: savedPrefs
         });
-      } catch (error) {
-        console.error('❌ Failed to load saved preferences:', error);
       }
     }
-  }, []);
-  
-  // Activity tracking for session management
+  }, [state.userType, state.isLoading]);
+
+  // Activity tracking
   useEffect(() => {
     if (state.isAuthenticated) {
       const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart'];
-      
-      const handleActivity = () => {
-        updateActivity();
-      };
+      const handleActivity = () => updateActivity();
       
       activityEvents.forEach(event => {
         document.addEventListener(event, handleActivity, { passive: true });
@@ -531,13 +460,13 @@ export const AuthProvider = ({ children }) => {
       };
     }
   }, [state.isAuthenticated, updateActivity]);
-  
+
   // Session expiry check
   useEffect(() => {
     if (state.isAuthenticated && state.sessionExpiry) {
       const checkExpiry = () => {
         if (new Date() > new Date(state.sessionExpiry)) {
-          console.log('🕒 Admin session expired');
+          console.log('🕒 Session expired');
           dispatch({ type: ActionTypes.SESSION_EXPIRED });
           localStorage.removeItem('safestreets_admin_token');
         }
@@ -547,42 +476,45 @@ export const AuthProvider = ({ children }) => {
       return () => clearInterval(interval);
     }
   }, [state.isAuthenticated, state.sessionExpiry]);
-  
-  // Context value
-  const contextValue = {
+
+  const value = {
     // State
     ...state,
     
     // Actions
+    login,
     loginAdmin,
-    logoutAdmin,
-    loadAdminProfile,
-    updateAdminPreferences,
+    logout,
+    updatePreferences,
     updateActivity,
     clearErrors,
     
     // Utilities
-    hasAdminPermission,
+    hasPermission,
+    isAdmin: state.userType === USER_TYPES.ADMIN && state.isAuthenticated,
+    isPolice: state.userType === USER_TYPES.POLICE && state.isAuthenticated,
+    isResearcher: state.userType === USER_TYPES.RESEARCHER && state.isAuthenticated,
+    isAnonymous: state.userType === USER_TYPES.ANONYMOUS,
     
     // Computed values
     isSessionExpired: state.authState === AUTH_STATES.SESSION_EXPIRED,
-    isAccountLocked: state.authState === AUTH_STATES.LOCKED,
     isAuthenticating: state.authState === AUTH_STATES.AUTHENTICATING,
     sessionTimeRemaining: state.sessionExpiry ? 
       Math.max(0, new Date(state.sessionExpiry) - new Date()) : 0,
     
     // Constants
+    USER_TYPES,
     AUTH_STATES
   };
-  
+
   return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
+    <AuthContext.Provider value={value}>
+      {!state.isLoading ? children : <div>Loading Session...</div>}
     </AuthContext.Provider>
   );
 };
 
-// Hook to use the AuthContext
+// Main hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -591,40 +523,45 @@ export const useAuth = () => {
   return context;
 };
 
-// Additional specialized hooks for admin features
+// Specialized hooks for convenience
+export const usePermissions = () => {
+  const { permissions, hasPermission } = useAuth();
+  return { permissions, hasPermission };
+};
+
+export const usePreferences = () => {
+  const { preferences, updatePreferences } = useAuth();
+  return { preferences, updatePreferences };
+};
+
 export const useAdminAuth = () => {
-  const {
-    isAuthenticated,
+  const { 
+    isAuthenticated, 
+    isAdmin, 
+    user, 
+    loginAdmin, 
+    logout, 
+    hasPermission,
     isLoading,
-    adminUser,
-    adminProfile,
-    adminPermissions,
-    adminLevel,
-    loginAdmin,
-    logoutAdmin,
-    hasAdminPermission,
     error,
     loginError,
     clearErrors
   } = useAuth();
   
   return {
-    isAuthenticated,
-    isLoading,
-    adminUser,
-    adminProfile,
-    adminPermissions,
-    adminLevel,
+    isAuthenticated: isAuthenticated && isAdmin,
+    adminUser: isAdmin ? user : null,
     loginAdmin,
-    logoutAdmin,
-    hasAdminPermission,
+    logoutAdmin: logout,
+    hasAdminPermission: hasPermission,
+    isLoading,
     error,
     loginError,
     clearErrors
   };
 };
 
-export const useAdminSession = () => {
+export const useSession = () => {
   const {
     sessionToken,
     sessionExpiry,
@@ -641,32 +578,6 @@ export const useAdminSession = () => {
     sessionTimeRemaining,
     isSessionExpired,
     updateActivity
-  };
-};
-
-export const useAdminPreferences = () => {
-  const {
-    adminPreferences,
-    updateAdminPreferences
-  } = useAuth();
-  
-  return {
-    preferences: adminPreferences,
-    updatePreferences: updateAdminPreferences
-  };
-};
-
-export const useAdminSecurity = () => {
-  const {
-    adminSecurityContext,
-    isAccountLocked,
-    hasAdminPermission
-  } = useAuth();
-  
-  return {
-    securityContext: adminSecurityContext,
-    isAccountLocked,
-    hasAdminPermission
   };
 };
 
