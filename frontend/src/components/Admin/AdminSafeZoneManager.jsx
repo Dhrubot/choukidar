@@ -40,7 +40,7 @@ const AdminSafeZoneManager = () => {
   const fetchSafeZones = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await apiService.request('/safe-zones/admin/all')
+      const response = await apiService.request('/safezones/admin/all')
       
       if (response.success) {
         setSafeZones(response.data)
@@ -130,7 +130,7 @@ const AdminSafeZoneManager = () => {
     if (!confirm('Are you sure you want to delete this safe zone?')) return
 
     try {
-      const response = await apiService.request(`/safe-zones/admin/${zoneId}`, {
+      const response = await apiService.request(`/safezones/admin/${zoneId}`, {
         method: 'DELETE'
       })
 
@@ -146,7 +146,7 @@ const AdminSafeZoneManager = () => {
 
   const handleStatusChange = async (zoneId, newStatus) => {
     try {
-      const response = await apiService.request(`/safe-zones/admin/${zoneId}/status`, {
+      const response = await apiService.request(`/safezones/admin/${zoneId}/status`, {
         method: 'PUT',
         body: { status: newStatus }
       })
@@ -167,7 +167,7 @@ const AdminSafeZoneManager = () => {
     if (selectedZones.length === 0) return
 
     try {
-      const response = await apiService.request('/safe-zones/admin/bulk/status', {
+      const response = await apiService.request('/safezones/admin/bulk/status', {
         method: 'PUT',
         body: { 
           zoneIds: selectedZones,

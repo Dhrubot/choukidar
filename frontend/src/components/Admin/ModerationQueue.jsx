@@ -39,7 +39,16 @@ const ModerationQueue = () => {
       }
 
       if (response.success) {
-        let filteredReports = response.data
+        // Handle the correct data structure from backend
+        let reportsData = response.data.reports || response.data || [];
+        
+        // Ensure it's an array
+        if (!Array.isArray(reportsData)) {
+          console.error('Reports data is not an array:', reportsData);
+          reportsData = [];
+        }
+        
+        let filteredReports = reportsData;
 
         // Apply status filter
         if (filterStatus !== 'all' && filterStatus !== 'pending') {
@@ -63,21 +72,23 @@ const ModerationQueue = () => {
           )
         }
 
-        // Apply sorting
-        filteredReports.sort((a, b) => {
-          switch (sortBy) {
-            case 'newest':
-              return new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp)
-            case 'oldest':
-              return new Date(a.createdAt || a.timestamp) - new Date(b.createdAt || b.timestamp)
-            case 'severity':
-              return b.severity - a.severity
-            case 'type':
-              return a.type.localeCompare(b.type)
-            default:
-              return 0
-          }
-        })
+        // Apply sorting - ensure filteredReports is still an array
+        if (Array.isArray(filteredReports)) {
+          filteredReports.sort((a, b) => {
+            switch (sortBy) {
+              case 'newest':
+                return new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp)
+              case 'oldest':
+                return new Date(a.createdAt || a.timestamp) - new Date(b.createdAt || b.timestamp)
+              case 'severity':
+                return b.severity - a.severity
+              case 'type':
+                return a.type.localeCompare(b.type)
+              default:
+                return 0
+            }
+          })
+        }
 
         setReports(filteredReports)
       }

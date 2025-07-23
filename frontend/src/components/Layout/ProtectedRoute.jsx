@@ -188,7 +188,9 @@ const ProtectedRoute = ({
   }
 
   // All checks passed - render the protected content
-  console.log(`✅ Access granted to protected route: ${location.pathname}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`✅ Access granted to protected route: ${location.pathname}`);
+  }
   return children;
 };
 

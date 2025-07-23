@@ -34,6 +34,7 @@ const initialState = {
   
   // Session management
   sessionToken: null,
+  refreshToken: null,
   sessionExpiry: null,
   lastActivity: Date.now(),
   
@@ -113,6 +114,7 @@ const authReducer = (state, action) => {
         },
         preferences: action.payload.preferences || state.preferences,
         sessionToken: action.payload.sessionToken,
+        refreshToken: action.payload.refreshToken,
         sessionExpiry: action.payload.sessionExpiry,
         lastActivity: Date.now(),
       };
@@ -142,6 +144,7 @@ const authReducer = (state, action) => {
           loginAttempts: 0 // Reset on successful login
         },
         sessionToken: action.payload.token,
+        refreshToken: action.payload.refreshToken,
         sessionExpiry: action.payload.sessionExpiry,
         preferences: action.payload.preferences || state.preferences,
         lastActivity: Date.now(),
@@ -185,6 +188,7 @@ const authReducer = (state, action) => {
         isAuthenticated: false,
         authState: AUTH_STATES.SESSION_EXPIRED,
         sessionToken: null,
+        refreshToken: null,
         sessionExpiry: null,
         user: null,
         userId: null,
@@ -257,6 +261,7 @@ export const AuthProvider = ({ children }) => {
               securityContext: sessionResponse.securityContext,
               preferences: sessionResponse.preferences,
               sessionToken: storedToken,
+              refreshToken: sessionResponse.refreshToken,
               sessionExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
             }
           });
@@ -321,9 +326,10 @@ export const AuthProvider = ({ children }) => {
           throw new Error('Invalid user type');
       }
 
-      if (response.success && response.token) {
+      if (response.success && (response.token || response.accessToken)) {
         // Store token (using generic key for now, could be user-type specific)
-        localStorage.setItem('safestreets_admin_token', response.token);
+        const token = response.token || response.accessToken;
+        localStorage.setItem('safestreets_admin_token', token);
         
         dispatch({
           type: ActionTypes.LOGIN_SUCCESS,
@@ -333,7 +339,8 @@ export const AuthProvider = ({ children }) => {
             permissions: response.user.permissions,
             securityContext: response.securityContext,
             preferences: response.preferences,
-            token: response.token,
+            token: token,
+            refreshToken: response.refreshToken,
             sessionExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
           }
         });
@@ -444,22 +451,22 @@ export const AuthProvider = ({ children }) => {
   }, [state.userType, state.isLoading]);
 
   // Activity tracking
-  useEffect(() => {
-    if (state.isAuthenticated) {
-      const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart'];
-      const handleActivity = () => updateActivity();
+  // useEffect(() => {
+  //   if (state.isAuthenticated) {
+  //     const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+  //     const handleActivity = () => updateActivity();
       
-      activityEvents.forEach(event => {
-        document.addEventListener(event, handleActivity, { passive: true });
-      });
+  //     activityEvents.forEach(event => {
+  //       document.addEventListener(event, handleActivity, { passive: true });
+  //     });
       
-      return () => {
-        activityEvents.forEach(event => {
-          document.removeEventListener(event, handleActivity);
-        });
-      };
-    }
-  }, [state.isAuthenticated, updateActivity]);
+  //     return () => {
+  //       activityEvents.forEach(event => {
+  //         document.removeEventListener(event, handleActivity);
+  //       });
+  //     };
+  //   }
+  // }, [state.isAuthenticated]);
 
   // Session expiry check
   useEffect(() => {
@@ -564,6 +571,7 @@ export const useAdminAuth = () => {
 export const useSession = () => {
   const {
     sessionToken,
+    refreshToken,
     sessionExpiry,
     lastActivity,
     sessionTimeRemaining,
@@ -573,6 +581,7 @@ export const useSession = () => {
   
   return {
     sessionToken,
+    refreshToken,
     sessionExpiry,
     lastActivity,
     sessionTimeRemaining,

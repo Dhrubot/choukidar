@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 *.env
 backend/hash_password.js
+backend/scripts/createInitialAdmin.js
+backend/scripts/hash_password.js

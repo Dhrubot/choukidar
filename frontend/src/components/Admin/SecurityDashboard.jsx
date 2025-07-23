@@ -273,21 +273,21 @@ const SecurityDashboard = () => {
         ...filters
       });
       if (devicesResponse.success) {
-        setDeviceFingerprints(devicesResponse.data.devices);
+        setDeviceFingerprints(devicesResponse.devices || []);
         setPagination(prev => ({
           ...prev,
-          totalItems: devicesResponse.data.total
+          totalItems: devicesResponse.total || 0
         }));
       }
 
       // Fetch threat analysis (enhanced to include geographic threats)
-      const threatsResponse = await apiService.getThreatAnalysis();
+      const threatsResponse = await apiService.getAreaAnalysis();
       if (threatsResponse.success) {
         setThreatAnalysis({
           ...threatsResponse.data,
           // Ensure backward compatibility
-          geographicThreats: threatsResponse.data.geographicThreats || [],
-          suspiciousPatterns: threatsResponse.data.suspiciousPatterns || []
+          geographicThreats: threatsResponse.geographicThreats || [],
+          suspiciousPatterns: threatsResponse.suspiciousPatterns || []
         });
       }
 
@@ -698,7 +698,7 @@ const SecurityOverview = ({ securityInsights, threatAnalysis, systemStats, wsCon
               </div>
               <div className="text-center">
                 <div className="text-3xl font-bold text-green-600">
-                  {securityInsights.trustScoreAverage.toFixed(1)}
+                {(securityInsights?.trustScoreAverage || 0).toFixed(1)}
                 </div>
                 <div className="text-sm text-neutral-600">Avg Trust Score</div>
               </div>
@@ -710,7 +710,7 @@ const SecurityOverview = ({ securityInsights, threatAnalysis, systemStats, wsCon
           <div className="p-6">
             <h3 className="text-lg font-semibold text-neutral-800 mb-4">Risk Distribution</h3>
             <div className="space-y-3">
-              {Object.entries(securityInsights.riskDistribution).map(([level, count]) => (
+              {Object.entries(securityInsights.riskDistribution || {}).map(([level, count]) => (
                 <div key={level} className="flex items-center justify-between">
                   <span className="capitalize text-sm">{level.replace('_', ' ')}</span>
                   <div className="flex items-center space-x-2">
@@ -724,7 +724,7 @@ const SecurityOverview = ({ securityInsights, threatAnalysis, systemStats, wsCon
                           'bg-green-500'
                         }`}
                         style={{ 
-                          width: `${(count / securityInsights.totalDevices) * 100}%` 
+                          width: `${securityInsights?.totalDevices ? (count / securityInsights.totalDevices) * 100 : 0}%` 
                         }}
                       />
                     </div>
@@ -1296,7 +1296,9 @@ const SecurityAnalytics = ({ securityInsights, threatAnalysis, onExportReport, o
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
-                {((securityInsights.totalDevices - securityInsights.quarantinedDevices) / securityInsights.totalDevices * 100).toFixed(1)}%
+              {securityInsights?.totalDevices && securityInsights?.quarantinedDevices 
+                  ? (((securityInsights.totalDevices - securityInsights.quarantinedDevices) / securityInsights.totalDevices * 100).toFixed(1))
+                  : '0.0'}%
               </div>
               <div className="text-sm text-neutral-600">Clean Devices</div>
             </div>
