@@ -311,7 +311,7 @@ app.get('/api/websocket/status', (req, res) => {
 });
 
 // 404 handler (ENHANCED with security context)
-app.use('*', (req, res) => {
+app.use('*catchall', (req, res) => {
   const userContext = req.userContext || {};
   
   if (userContext.securityContext?.riskLevel === 'high' || userContext.securityContext?.riskLevel === 'critical') {
