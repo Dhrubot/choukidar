@@ -16,9 +16,22 @@ const { userTypeDetection } = require('../middleware/userTypeDetection');
 router.use(userTypeDetection);
 
 // Audit logging helper
-const logAuthAction = async (actor, actionType, outcome, details = {}, severity = 'low', target = {}) => {
+const logAuthAction = async (actor, actionType, outcome, details = {}, severity = 'low', target = null) => {
   try {
-    await AuditLog.create({ actor, actionType, outcome, details, severity, target });
+    const auditData = { 
+      actor, 
+      actionType, 
+      outcome, 
+      details, 
+      severity 
+    };
+    
+    // Only add target if it's a valid string
+    if (target && typeof target === 'string') {
+      auditData.target = target;
+    }
+    
+    await AuditLog.create(auditData);
   } catch (error) {
     console.error(`❌ Audit log failed for action ${actionType}:`, error);
   }
@@ -122,11 +135,7 @@ router.post('/admin/login', loginLimiter, async (req, res) => {
     const { accessToken, refreshToken } = await TokenManager.generateTokenPair(adminUser);
     
     // Log successful login
-    await logAuthAction(actor, 'admin_login', 'success', {}, 'low', { 
-      id: adminUser._id, 
-      type: 'user', 
-      name: username 
-    });
+    await logAuthAction(actor, 'admin_login', 'success', {}, 'low', `${adminUser.roleData.admin.username} (ID: ${adminUser._id})`);
     
     await adminUser.save();
     
@@ -354,7 +363,7 @@ router.post('/admin/unlock/:userId', RoleMiddleware.apply(RoleMiddleware.superAd
         reason: reason || 'Manual unlock'
       },
       'high',
-      { id: userId, type: 'user', name: targetUser.roleData.admin.username }
+      `${targetUser.roleData.admin.username} (ID: ${userId})`
     );
     
     console.log(`🔓 Account unlocked: ${targetUser.roleData.admin.username} by ${actingAdmin.roleData.admin.username}`);
