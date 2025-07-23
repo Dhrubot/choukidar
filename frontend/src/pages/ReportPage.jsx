@@ -14,6 +14,7 @@ import { useAuth } from '../contexts/AuthContext' // Single import for enhanced 
 import { useDevice } from '../contexts/DeviceContext' // Updated import for device fingerprint
 import apiService from '../services/api'
 import logger, { logDebug, logError, logInfo } from '../services/utils/logger'
+import errorHandler, { handleValidationError, handleLocationError, handleApiError } from '../services/utils/errorHandler'
 import LocationPicker from '../components/LocationPicker/LocationPicker'
 import { isWithinBangladesh } from '../config/locationConfig'
 
@@ -60,10 +61,10 @@ function ReportPage() {
           setLocationLoading(false)
         },
         (error) => {
+          const errorResponse = handleLocationError(error, 'ReportPage')
           logError('Could not get user location', 'ReportPage', error)
           setLocationLoading(false)
-          setLocationError('Unable to get location. You can still select manually.')
-          // Don't show error to user initially - LocationPicker will handle this
+          setLocationError(errorResponse.message || 'Unable to get location. You can still select manually.')
         },
         {
           enableHighAccuracy: true,
@@ -143,7 +144,14 @@ function ReportPage() {
     // Validate form
     const formErrors = validateForm()
     if (Object.keys(formErrors).length > 0) {
+      const errorResponse = handleValidationError(formErrors, 'ReportPage')
       logError('Form validation failed', 'ReportPage', formErrors)
+      setFormErrors(formErrors)
+      // Show user-friendly validation error
+      if (errorResponse.type === 'toast') {
+        // You can integrate with your toast system here
+        console.warn(errorResponse.message) // Temporary fallback
+      }
       return
     }
     
@@ -209,7 +217,14 @@ function ReportPage() {
       // Scroll to top to show success message
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
+      const errorResponse = handleApiError(err, 'ReportPage')
       logError('Failed to submit report', 'ReportPage', err)
+      
+      // Show user-friendly error message
+      if (errorResponse.type === 'toast') {
+        // Integrate with your toast notification system
+        alert(errorResponse.message) // Temporary fallback until toast system is integrated
+      }
     }
   }
 
@@ -739,7 +754,7 @@ function ReportPage() {
               >
                 {submitting ? (
                   <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                     Submitting Report...
                   </div>
                 ) : (

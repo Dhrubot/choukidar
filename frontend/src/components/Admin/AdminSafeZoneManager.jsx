@@ -8,6 +8,7 @@ import {
 import SafeZoneEditor from './SafeZoneEditor'
 import SafeZoneImporter from './SafeZoneImporter'
 import apiService from '../../services/api'
+import { handleApiError } from '../../services/utils/errorHandler'
 
 const AdminSafeZoneManager = () => {
   const [safeZones, setSafeZones] = useState([])
@@ -46,10 +47,12 @@ const AdminSafeZoneManager = () => {
         setSafeZones(response.data)
         calculateStats(response.data)
       } else {
-        setError('Failed to fetch safe zones')
+        const errorResponse = handleApiError(new Error(response.message), 'AdminSafeZoneManager')
+        setError(errorResponse.userMessage || 'Failed to fetch safe zones')
       }
     } catch (err) {
-      setError(err.message || 'Failed to fetch safe zones')
+      const errorResponse = handleApiError(err, 'AdminSafeZoneManager')
+      setError(errorResponse.userMessage || 'Error fetching safe zones')
       console.error('Error fetching safe zones:', err)
     } finally {
       setLoading(false)
@@ -127,7 +130,7 @@ const AdminSafeZoneManager = () => {
   }
 
   const handleDelete = async (zoneId) => {
-    if (!confirm('Are you sure you want to delete this safe zone?')) return
+    if (!window.confirm('Are you sure you want to delete this safe zone?')) return
 
     try {
       const response = await apiService.request(`/safezones/admin/${zoneId}`, {
@@ -137,10 +140,12 @@ const AdminSafeZoneManager = () => {
       if (response.success) {
         setSafeZones(prev => prev.filter(z => z._id !== zoneId))
       } else {
-        alert('Failed to delete safe zone')
+        const errorResponse = handleApiError(new Error(response.message), 'AdminSafeZoneManager')
+        setError(errorResponse.userMessage || 'Failed to delete safe zone')
       }
     } catch (err) {
-      alert('Error deleting safe zone: ' + err.message)
+      const errorResponse = handleApiError(err, 'AdminSafeZoneManager')
+      setError(errorResponse.userMessage || 'Error deleting safe zone')
     }
   }
 
@@ -156,10 +161,12 @@ const AdminSafeZoneManager = () => {
           z._id === zoneId ? { ...z, status: newStatus } : z
         ))
       } else {
-        alert('Failed to update status')
+        const errorResponse = handleApiError(new Error(response.message), 'AdminSafeZoneManager')
+        setError(errorResponse.userMessage || 'Failed to update status')
       }
     } catch (err) {
-      alert('Error updating status: ' + err.message)
+      const errorResponse = handleApiError(err, 'AdminSafeZoneManager')
+      setError(errorResponse.userMessage || 'Error updating status')
     }
   }
 
@@ -181,10 +188,12 @@ const AdminSafeZoneManager = () => {
         ))
         setSelectedZones([])
       } else {
-        alert('Failed to update zones')
+        const errorResponse = handleApiError(new Error(response.message), 'AdminSafeZoneManager')
+        setError(errorResponse.userMessage || 'Failed to update zones')
       }
     } catch (err) {
-      alert('Error updating zones: ' + err.message)
+      const errorResponse = handleApiError(err, 'AdminSafeZoneManager')
+      setError(errorResponse.userMessage || 'Error updating zones')
     }
   }
 

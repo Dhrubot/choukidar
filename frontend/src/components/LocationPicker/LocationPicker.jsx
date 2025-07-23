@@ -1,10 +1,11 @@
 // === src/components/LocationPicker/LocationPicker.jsx (IMPROVED - Better mobile UX) ===
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { MapPin, Search, Navigation, Check, AlertCircle, X } from 'lucide-react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import useGeocoding from '../../hooks/useGeocoding'
 import { mapOptions, geocodingOptions } from '../../config/locationConfig'
+import { handleLocationError } from '../../services/utils/errorHandler'
 
 // Fix default marker icon issue in Leaflet
 delete L.Icon.Default.prototype._getIconUrl
@@ -26,6 +27,7 @@ const LocationPicker = ({
   const [selectedLocation, setSelectedLocation] = useState(initialLocation)
   const [mapCenter, setMapCenter] = useState(mapOptions.defaultCenter)
   const [gpsLoading, setGpsLoading] = useState(false)
+  const [gpsError, setGpsError] = useState(null)
   
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
@@ -211,8 +213,8 @@ const LocationPicker = ({
       await handleLocationSelect({ lat: position.lat, lng: position.lng }, 'GPS')
       setIsExpanded(true) // Show map to confirm
     } catch (error) {
-      console.error('GPS error:', error)
-      alert(error.message || 'Unable to get your current location')
+      const errorResponse = handleLocationError(error, 'LocationPicker')
+      setGpsError(errorResponse.userMessage || 'Unable to get your current location')
     } finally {
       setGpsLoading(false)
     }
@@ -407,6 +409,12 @@ const LocationPicker = ({
                 <Navigation className="w-4 h-4 text-bangladesh-green" />
               )}
             </button>
+            {gpsError && (
+              <div className="absolute bottom-3 left-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-center">
+                <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+                <span>{gpsError}</span>
+              </div>
+            )}
           </div>
 
           {/* Actions - IMPROVED mobile layout */}

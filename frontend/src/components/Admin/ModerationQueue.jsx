@@ -6,6 +6,7 @@ import {
   Filter, Search, RefreshCw, MoreHorizontal, Shield
 } from 'lucide-react'
 import apiService from '../../services/api'
+import { handleApiError } from '../../services/utils/errorHandler'
 
 const ModerationQueue = () => {
   const [reports, setReports] = useState([])
@@ -96,7 +97,8 @@ const ModerationQueue = () => {
         setReports(filteredReports)
       }
     } catch (err) {
-      setError(err.message)
+      const errorResponse = handleApiError(err, 'ModerationQueue')
+      setError(errorResponse.userMessage || 'Error fetching reports')
     } finally {
       setLoading(false)
     }
@@ -126,9 +128,13 @@ const ModerationQueue = () => {
         
         // Remove from selected if it was selected
         setSelectedReports(prev => prev.filter(id => id !== reportId))
+      } else {
+        const errorResponse = handleApiError(new Error(response.message), 'ModerationQueue')
+        setError(errorResponse.userMessage || `Error ${action === 'approved' ? 'approving' : 'rejecting'} report`)
       }
     } catch (err) {
-      alert(`Error ${action === 'approved' ? 'approving' : 'rejecting'} report: ${err.message}`)
+      const errorResponse = handleApiError(err, 'ModerationQueue')
+      setError(errorResponse.userMessage || `Error ${action === 'approved' ? 'approving' : 'rejecting'} report`)
     } finally {
       setModerating(prev => ({ ...prev, [reportId]: false }))
     }
@@ -154,7 +160,8 @@ const ModerationQueue = () => {
       await fetchReports()
       setSelectedReports([])
     } catch (err) {
-      alert(`Error processing bulk action: ${err.message}`)
+      const errorResponse = handleApiError(err, 'ModerationQueue')
+      setError(errorResponse.userMessage || 'Error processing bulk action')
     }
   }
 

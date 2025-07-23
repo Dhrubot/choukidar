@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useRouting, useRouteComparison, useRouteMonitoring } from '../../hooks/useRouting'
 import { getQuotaStatus, isQuotaLow } from '../../services/requestManager'
+import { handleValidationError, handleApiError } from '../../services/utils/errorHandler'
 
 const RoutePlanner = ({ 
   reports = [], 
@@ -56,6 +57,7 @@ const RoutePlanner = ({
   const [timeOfDay, setTimeOfDay] = useState('current')
   const [avoidRecentIncidents, setAvoidRecentIncidents] = useState(true)
   const [showQuotaInfo, setShowQuotaInfo] = useState(false)
+  const [errorState, setError] = useState(null)
 
   // Route comparison for alternatives
   const routeIds = useMemo(() => {
@@ -93,7 +95,11 @@ const RoutePlanner = ({
   // Handle coordinate input (simplified - could be enhanced with geocoding)
   const handleCalculateRoute = useCallback(async () => {
     if (!startInput || !endInput) {
-      alert('Please enter both start and end locations')
+      const errorResponse = handleValidationError(
+        { locations: 'Both start and end locations are required' }, 
+        'RoutePlanner'
+      )
+      setError(errorResponse.userMessage || 'Please enter both start and end locations')
       return
     }
 
@@ -107,7 +113,11 @@ const RoutePlanner = ({
     const endCoords = parseCoords(endInput)
 
     if (!startCoords || !endCoords) {
-      alert('Please enter coordinates in format: lat,lng (e.g., 23.8103, 90.4125)')
+      const errorResponse = handleValidationError(
+        { format: 'Invalid coordinate format' },
+        'RoutePlanner'
+      )
+      setError(errorResponse.userMessage || 'Please enter coordinates in format: lat,lng (e.g., 23.8103, 90.4125)')
       return
     }
 
@@ -342,13 +352,13 @@ const RoutePlanner = ({
       </div>
 
       {/* Error Display */}
-      {error && (
+      {errorState && (
         <div className="bg-white rounded-xl shadow-md border border-red-200 mb-4 p-4">
           <div className="flex items-center space-x-3 text-red-600">
             <AlertTriangle className="w-5 h-5" />
             <span className="font-medium">Route Calculation Failed</span>
           </div>
-          <p className="text-red-700 mt-2 text-sm">{error}</p>
+          <p className="text-red-700 mt-2 text-sm">{errorState}</p>
           <button
             onClick={refreshRoute}
             className="mt-3 btn-secondary text-sm"

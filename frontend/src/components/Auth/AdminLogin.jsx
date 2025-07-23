@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext'; // Single import for enhanced context
 import { useDevice } from '../../contexts/DeviceContext'; // Updated import for device fingerprint
+import { handleAuthError, handleValidationError } from '../../services/utils/errorHandler'; // Import error handler
 
 /**
  * AdminLogin Component
@@ -142,22 +143,15 @@ const AdminLogin = ({
         setSubmitAttempted(false);
         
       } else {
-        console.log('❌ Admin login failed:', result.message);
-        
-        // Call error callback if provided
-        if (onLoginError) {
-          onLoginError(result.message);
-        }
+        const errorResponse = handleAuthError(new Error(result.message), 'AdminLogin')
+        setFormErrors({ password: errorResponse.userMessage || result.message });
       }
       
-    } catch (error) {
-      console.error('❌ Login submission error:', error);
-      
-      if (onLoginError) {
-        onLoginError('Login failed. Please try again.');
-      }
+    } catch (err) {
+      const errorResponse = handleAuthError(err, 'AdminLogin')
+      setFormErrors({ password: errorResponse.userMessage || 'Login failed. Please try again.' });
     }
-  }, [formData, rememberMe, validateForm, loginAdmin, onLoginSuccess, onLoginError]);
+  }, [formData, rememberMe, validateForm, loginAdmin, onLoginSuccess]);
   
   // Handle password visibility toggle
   const togglePasswordVisibility = useCallback(() => {

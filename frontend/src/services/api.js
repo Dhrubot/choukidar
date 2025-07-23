@@ -34,6 +34,7 @@ import behaviorService from './features/behaviorService.js';
 import { calculateDistance, calculateRouteSafetyScore } from './utils/geoUtils.js';
 import { io } from 'socket.io-client';
 import logger, { logConnection, logError } from './utils/logger.js';
+import { handleApiError, handleNetworkError, handleAuthError } from './utils/errorHandler.js';
 
 /**
  * Main API Service class that orchestrates all feature services.
@@ -718,8 +719,12 @@ class ApiService {
       });
       return response.json();
     } catch (error) {
+      const errorResponse = handleApiError(error, 'API-validateInviteToken')
       logError('API Error: validateInviteToken', 'API', error);
-      return { success: false, message: 'Network error or server unavailable.' };
+      return { 
+        success: false, 
+        message: errorResponse.userMessage || 'Network error or server unavailable.' 
+      };
     }
   }
 
@@ -734,8 +739,12 @@ class ApiService {
       });
       return response.json();
     } catch (error) {
+      const errorResponse = handleApiError(error, 'API-registerWithInvite')
       logError('API Error: registerWithInvite', 'API', error);
-      return { success: false, message: 'Network error or server unavailable.' };
+      return { 
+        success: false, 
+        message: errorResponse.userMessage || 'Network error or server unavailable.' 
+      };
     }
   }
 
