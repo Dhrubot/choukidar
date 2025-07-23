@@ -8,6 +8,7 @@ import {
 import apiService from '../services/api'
 import ModerationQueue from '../components/Admin/ModerationQueue'
 import SecurityDashboard from '../components/Admin/SecurityDashboard'
+import AdminSafeZoneManager from '../components/Admin/AdminSafeZoneManager'
 
 function AdminPage() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -126,7 +127,7 @@ function AdminPage() {
   const securityRisk = stats.security.flaggedReports > 0 ? 'High' : 'Low'
   const bangladeshCoverage = stats.total > 0 ? ((stats.security.bangladeshReports / stats.total) * 100).toFixed(1) : 0
 
-  // Tab configuration - Updated with Security tab
+  // Tab configuration - Updated with Security tab and Safe Zones tab
   const tabs = [
     { 
       id: 'dashboard', 
@@ -146,6 +147,12 @@ function AdminPage() {
       icon: Shield,
       badge: stats.security.flaggedReports > 0 ? stats.security.flaggedReports : null,
       badgeColor: 'bg-red-500'
+    },
+    { 
+      id: 'safezones', 
+      label: 'Safe Zones', 
+      icon: MapPin,
+      badge: null
     },
     { 
       id: 'analytics', 
@@ -567,6 +574,11 @@ function AdminPage() {
         {/* Security Dashboard Tab - NEW */}
         {activeTab === 'security' && (
           <SecurityDashboard />
+        )}
+
+        {/* Safe Zone Management Tab - NEW */}
+        {activeTab === 'safezones' && (
+          <AdminSafeZoneManager />
         )}
 
         {/* Coming Soon Tabs */}
