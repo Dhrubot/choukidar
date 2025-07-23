@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const http = require('http'); // Import http module
+const http = require('http');
 const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
@@ -10,9 +10,9 @@ const PORT = process.env.PORT || 5000;
 
 // ENHANCED: Import security middleware functions as named exports
 const { userTypeDetection } = require('./src/middleware/userTypeDetection');
-const SocketHandler = require('./src/websocket/socketHandler'); // Import the SocketHandler class
+const SocketHandler = require('./src/websocket/socketHandler');
 
-// Basic Middleware (PRESERVED)
+// Basic Middleware (PRESERVED with cookieParser)
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://choukidar.com'] 
@@ -21,18 +21,17 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser()); // IMPORTANT: Don't miss this
 
 // =================================================================
-// === NEW: TEMPORARY REQUEST LOGGER MIDDLEWARE ====================
+// === TEMPORARY REQUEST LOGGER MIDDLEWARE =========================
 // =================================================================
 app.use((req, res, next) => {
-  // We only care about API calls, not static assets if you were serving them
   if (req.path.startsWith('/api')) {
     console.log('--- Incoming Request ---');
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     console.log('Headers:', JSON.stringify(req.headers, null, 2));
     
-    // Only log body if it exists
     if (req.body && Object.keys(req.body).length > 0) {
       console.log('Body:', JSON.stringify(req.body, null, 2));
     } else {
@@ -41,21 +40,18 @@ app.use((req, res, next) => {
     
     console.log('------------------------');
   }
-  next(); // IMPORTANT: Always call next() to pass the request along
+  next();
 });
 
 // ENHANCED: Security middleware - Apply device fingerprinting and user context to all requests
-// This middleware must come BEFORE route definitions to ensure user context is available
-app.use(userTypeDetection); // userTypeDetection is the main middleware function
+app.use(userTypeDetection);
 
 // ENHANCED: Security headers for additional protection
 app.use((req, res, next) => {
-  // Prevent XSS attacks
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   
-  // Add security context to response headers (for debugging in development)
   if (process.env.NODE_ENV === 'development' && req.userContext) {
     res.setHeader('X-User-Type', req.userContext.userType);
     res.setHeader('X-Trust-Score', req.userContext.securityContext?.trustScore || 0);
@@ -65,13 +61,26 @@ app.use((req, res, next) => {
   next();
 });
 
-// Database connection (PRESERVED)
+// Database connection
 mongoose.connect(process.env.MONGODB_URI);
 
-// Database connection events (PRESERVED)
+// Create HTTP server
+const server = http.createServer(app);
+
+// Database connection events with enhanced WebSocket initialization
 mongoose.connection.on('connected', () => {
   console.log('✅ Connected to MongoDB');
   console.log('🛡️ Security middleware active - Device fingerprinting enabled');
+  
+  // Initialize WebSocket server after database connection
+  try {
+    const socketHandler = new SocketHandler(server);
+    app.locals.socketHandler = socketHandler; // Make accessible in routes
+    global.socketHandler = socketHandler;     // Also make globally available
+    console.log('🔌 WebSocket server initialized and ready');
+  } catch (error) {
+    console.error('❌ Failed to initialize WebSocket server:', error);
+  }
 });
 
 mongoose.connection.on('error', (err) => {
@@ -81,11 +90,9 @@ mongoose.connection.on('error', (err) => {
 // ENHANCED: User context logging middleware (for monitoring)
 app.use((req, res, next) => {
   if (req.userContext) {
-    // Log user activity for security monitoring (only for non-GET requests)
     if (req.method !== 'GET') {
       console.log(`🔍 ${req.method} ${req.path} - User: ${req.userContext.userType} (Trust: ${req.userContext.securityContext?.trustScore || 0}, Risk: ${req.userContext.securityContext?.riskLevel || 'unknown'})`);
       
-      // Log suspicious activity
       if (req.userContext.securityContext?.quarantined) {
         console.log(`🚨 Quarantined user attempting ${req.method} ${req.path}`);
       }
@@ -98,15 +105,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Create HTTP server
-const server = http.createServer(app);
-
-// Initialize WebSocket server with the http server
-const socketHandler = new SocketHandler(server);
-// Make socketHandler accessible in route handlers via app.locals
-app.locals.socketHandler = socketHandler;
-
-
 // EXISTING ROUTES (PRESERVED)
 app.use('/api/reports', require('./src/routes/reports'));
 app.use('/api/admin', require('./src/routes/admin'));
@@ -116,31 +114,31 @@ app.use('/api/safezones', require('./src/routes/safeZones'));
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/user-types', require('./src/routes/userTypes'));
 
-// invite only registration - This line was causing the error due to incorrect import
-// The invitesRoutes module itself needs to correctly import its middleware
-app.use('/api/invites', require('./src/routes/invites')); // Corrected: directly require the module
+// IMPORTANT: Invites route (don't miss this!)
+app.use('/api/invites', require('./src/routes/invites'));
 
-// ENHANCED: Health check with security status
+// ENHANCED: Health check with security status and WebSocket status
 app.get('/api/health', (req, res) => {
-  // Get user context for health check
   const userContext = req.userContext || {};
+  const socketHandler = app.locals.socketHandler || global.socketHandler;
   
   res.json({ 
     message: 'SafeStreets API is running!',
     timestamp: new Date().toISOString(),
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    websocket: socketHandler ? 'connected' : 'disconnected',
     features: {
       reports: 'active',
       admin: 'active',
       safeZones: 'active',
-      // NEW: Security features status
       authentication: 'active',
       userManagement: 'active',
       deviceFingerprinting: 'active',
       securityMonitoring: 'active',
-      routing: 'client-side' // (handled by frontend)
+      realtimeUpdates: socketHandler ? 'active' : 'inactive',
+      inviteSystem: 'active', // Don't forget this feature
+      routing: 'client-side'
     },
-    // NEW: Security status
     security: {
       userTypeDetection: 'active',
       deviceFingerprinting: userContext.deviceFingerprint ? 'active' : 'inactive',
@@ -149,29 +147,37 @@ app.get('/api/health', (req, res) => {
       riskLevel: userContext.securityContext?.riskLevel || 'unknown',
       quarantineStatus: userContext.securityContext?.quarantined || false
     },
+    websocketStats: socketHandler ? socketHandler.getConnectionStats() : {
+      totalConnections: 0,
+      adminConnections: 0,
+      securitySubscriptions: 0,
+      uptime: 0
+    },
     version: '3B-Intelligence-Enhanced'
   });
 });
 
-// ENHANCED: API info endpoint with new features
+// ENHANCED: API info endpoint with comprehensive features
 app.get('/api', (req, res) => {
+  const socketHandler = app.locals.socketHandler || global.socketHandler;
+  
   res.json({
     message: 'SafeStreets Bangladesh API - Phase 3B Enhanced',
-    version: '3.2.0', // Incremented version to reflect new features
+    version: '3.2.0',
     features: [
       'Crime Reports', 
       'Admin Management', 
       'Safe Zones', 
       'Route Intelligence',
-      // NEW FEATURES
       'Advanced Security Framework',
       'User Type Management',
       'Device Fingerprinting',
       'Female Safety Integration',
-      'Multi-Role Authentication'
+      'Multi-Role Authentication',
+      'Real-time WebSocket Updates',
+      'Invite-Only Registration System' // Important feature
     ],
     endpoints: {
-      // EXISTING ENDPOINTS (PRESERVED)
       reports: {
         public: '/api/reports',
         admin: '/api/admin/reports'
@@ -180,7 +186,6 @@ app.get('/api', (req, res) => {
         public: '/api/safezones',
         admin: '/api/safezones/admin'
       },
-      // NEW ENDPOINTS
       authentication: {
         userContext: '/api/auth/user/context',
         adminLogin: '/api/auth/admin/login',
@@ -195,9 +200,31 @@ app.get('/api', (req, res) => {
         deviceManagement: '/api/user-types/admin/devices',
         securityActions: '/api/user-types/admin/security/:action'
       },
-      health: '/api/health'
+      inviteSystem: {
+        sendInvite: '/api/invites/send',
+        validateInvite: '/api/invites/validate/:token',
+        manageInvites: '/api/invites/admin'
+      },
+      system: {
+        health: '/api/health',
+        info: '/api',
+        securityStatus: '/api/security/status',
+        websocketStatus: '/api/websocket/status'
+      }
     },
-    // NEW: Security information
+    websocket: {
+      enabled: socketHandler ? true : false,
+      url: process.env.NODE_ENV === 'production' 
+        ? 'wss://choukidar.com' 
+        : 'ws://localhost:5000',
+      features: [
+        'Real-time security monitoring',
+        'Live report updates',
+        'Admin notifications',
+        'Female safety alerts',
+        'System health monitoring'
+      ]
+    },
     security: {
       features: [
         'Device Fingerprinting',
@@ -210,7 +237,6 @@ app.get('/api', (req, res) => {
       userTypes: ['anonymous', 'admin', 'police', 'researcher'],
       authentication: 'Role-based with device tracking'
     },
-    // NEW: Female safety features
     femaleSafety: {
       incidentTypes: [
         'eve_teasing',
@@ -262,11 +288,32 @@ app.get('/api/security/status', (req, res) => {
   });
 });
 
+// WebSocket status endpoint
+app.get('/api/websocket/status', (req, res) => {
+  const socketHandler = app.locals.socketHandler || global.socketHandler;
+  
+  if (!socketHandler) {
+    return res.status(503).json({
+      success: false,
+      message: 'WebSocket server not initialized',
+      status: 'disconnected'
+    });
+  }
+
+  const stats = socketHandler.getConnectionStats();
+  res.json({
+    success: true,
+    status: 'connected',
+    connectionStats: stats,
+    serverUptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
 // 404 handler (ENHANCED with security context)
-app.use('/{*catchall}', (req, res) => {
+app.use('*', (req, res) => {
   const userContext = req.userContext || {};
   
-  // Log 404 attempts from suspicious users
   if (userContext.securityContext?.riskLevel === 'high' || userContext.securityContext?.riskLevel === 'critical') {
     console.log(`⚠️ High-risk user attempted to access non-existent endpoint: ${req.method} ${req.path}`);
   }
@@ -278,12 +325,13 @@ app.use('/{*catchall}', (req, res) => {
       '/api/reports',
       '/api/admin',
       '/api/safezones',
-      '/api/auth', // NEW
-      '/api/user-types', // NEW
+      '/api/auth',
+      '/api/user-types',
+      '/api/invites', // Don't forget this!
       '/api/health',
-      '/api/security/status' // NEW
+      '/api/security/status',
+      '/api/websocket/status'
     ],
-    // Include user context for debugging (only in development)
     ...(process.env.NODE_ENV === 'development' && {
       userContext: {
         userType: userContext.userType,
@@ -297,7 +345,6 @@ app.use('/{*catchall}', (req, res) => {
 app.use((error, req, res, next) => {
   const userContext = req.userContext || {};
   
-  // Enhanced error logging with security context
   console.error('❌ Unhandled error:', {
     error: error.message,
     stack: error.stack,
@@ -309,7 +356,6 @@ app.use((error, req, res, next) => {
     timestamp: new Date().toISOString()
   });
   
-  // Log critical errors from suspicious users
   if (userContext.securityContext?.riskLevel === 'high' || userContext.securityContext?.riskLevel === 'critical') {
     console.error(`🚨 Critical error from high-risk user: ${userContext.user?.userId}`);
   }
@@ -318,7 +364,6 @@ app.use((error, req, res, next) => {
     success: false,
     message: 'Internal server error',
     error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
-    // Include security context in development
     ...(process.env.NODE_ENV === 'development' && {
       userContext: {
         userType: userContext.userType,
@@ -330,7 +375,7 @@ app.use((error, req, res, next) => {
 });
 
 // Server startup with enhanced logging
-server.listen(PORT, () => { // Listen on the http server, not the express app
+server.listen(PORT, () => {
   console.log('🚀 SafeStreets Bangladesh API server started');
   console.log(`📡 Server running on port ${PORT}`);
   console.log('🛡️ Enhanced Security Features:');
@@ -340,15 +385,20 @@ server.listen(PORT, () => { // Listen on the http server, not the express app
   console.log('   ✅ Security Monitoring');
   console.log('   ✅ Female Safety Integration');
   console.log('   ✅ Multi-Vector Threat Detection');
+  console.log('   🔌 Real-time WebSocket Updates');
+  console.log('   📧 Invite-Only Registration System');
   console.log('📊 Available Endpoints:');
   console.log('   📍 /api/reports - Crime reporting');
   console.log('   👮 /api/admin - Admin management');
   console.log('   🛡️ /api/safezones - Safe zone management');
   console.log('   🔐 /api/auth - Authentication');
   console.log('   👥 /api/user-types - User management');
+  console.log('   📧 /api/invites - Invite system');
   console.log('   💚 /api/health - Health check');
   console.log('   🔍 /api/security/status - Security monitoring');
+  console.log('   🔌 /api/websocket/status - WebSocket status');
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('🔌 WebSocket server will initialize after database connection');
 });
 
-module.exports = app;
+module.exports = { app, server };
