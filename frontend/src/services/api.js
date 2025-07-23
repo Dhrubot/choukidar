@@ -33,6 +33,7 @@ import safeZoneService from './features/safeZoneService.js';
 import behaviorService from './features/behaviorService.js';
 import { calculateDistance, calculateRouteSafetyScore } from './utils/geoUtils.js';
 import { io } from 'socket.io-client';
+import logger, { logConnection, logError } from './utils/logger.js';
 
 /**
  * Main API Service class that orchestrates all feature services.
@@ -536,19 +537,19 @@ class ApiService {
 
         // Connection event handlers
         this.socket.on('connect', () => {
-          console.log('✅ Real-time connection established')
+          logConnection('Real-time connection established', 'WebSocket')
         })
 
         this.socket.on('disconnect', (reason) => {
-          console.log('❌ Real-time connection lost:', reason)
+          logConnection(`Real-time connection lost: ${reason}`, 'WebSocket')
         })
 
         this.socket.on('reconnect', (attemptNumber) => {
-          console.log('🔄 Real-time connection restored after', attemptNumber, 'attempts')
+          logConnection(`Real-time connection restored after ${attemptNumber} attempts`, 'WebSocket')
         })
 
         this.socket.on('connect_error', (error) => {
-          console.error('❌ Real-time connection error:', error)
+          logError('Real-time connection error', 'WebSocket', error)
         })
       }
 
@@ -612,7 +613,7 @@ class ApiService {
       }
 
     } catch (error) {
-      console.error('❌ Failed to initialize real-time updates:', error)
+      logError('Failed to initialize real-time updates', 'WebSocket', error)
       // Fallback: return empty cleanup function
       return () => {}
     }
@@ -623,7 +624,7 @@ class ApiService {
     if (this.socket) {
       this.socket.disconnect()
       this.socket = null
-      console.log('🔌 Real-time connection closed')
+      logConnection('Real-time connection closed', 'WebSocket')
     }
   }
 
@@ -717,7 +718,7 @@ class ApiService {
       });
       return response.json();
     } catch (error) {
-      console.error('API Error: validateInviteToken', error);
+      logError('API Error: validateInviteToken', 'API', error);
       return { success: false, message: 'Network error or server unavailable.' };
     }
   }
@@ -733,7 +734,7 @@ class ApiService {
       });
       return response.json();
     } catch (error) {
-      console.error('API Error: registerWithInvite', error);
+      logError('API Error: registerWithInvite', 'API', error);
       return { success: false, message: 'Network error or server unavailable.' };
     }
   }

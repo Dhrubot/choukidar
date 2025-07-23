@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { MapPin, Shield, Users, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react'
+import apiService from '../services/api'
+import logger, { logError } from '../services/utils/logger'
 
 function Home() {
   const [stats, setStats] = useState({
@@ -12,8 +14,7 @@ function Home() {
 
   useEffect(() => {
     // Fetch stats from API
-    fetch('/api/reports')
-      .then(res => res.json())
+    apiService.getStats()
       .then(data => {
         if (data.success) {
           setStats(prev => ({
@@ -23,7 +24,7 @@ function Home() {
           }))
         }
       })
-      .catch(err => console.log('Error fetching stats:', err))
+      .catch(err => logError('Error fetching stats', 'HomePage', err))
   }, [])
 
   return (

@@ -12,6 +12,8 @@ import {
 import { useSubmitReport } from '../hooks/useReports'
 import { useAuth } from '../contexts/AuthContext' // Single import for enhanced context
 import { useDevice } from '../contexts/DeviceContext' // Updated import for device fingerprint
+import apiService from '../services/api'
+import logger, { logDebug, logError, logInfo } from '../services/utils/logger'
 import LocationPicker from '../components/LocationPicker/LocationPicker'
 import { isWithinBangladesh } from '../config/locationConfig'
 
@@ -53,20 +55,20 @@ function ReportPage() {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords
-          setUserLocation({ lat: latitude, lng: longitude })
+          logDebug(`Got user location: ${latitude}, ${longitude}`, 'ReportPage')
+          setUserLocation({ lat: latitude, lng: longitude})
           setLocationLoading(false)
-          console.log('📍 Got user location:', { latitude, longitude })
         },
         (error) => {
-          console.log('Could not get user location:', error)
+          logError('Could not get user location', 'ReportPage', error)
           setLocationLoading(false)
           setLocationError('Unable to get location. You can still select manually.')
           // Don't show error to user initially - LocationPicker will handle this
         },
         {
-          enableHighAccuracy: false,
-          timeout: 8000,
-          maximumAge: 600000 // 10 minutes
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000
         }
       )
     }
@@ -81,7 +83,7 @@ function ReportPage() {
 
   // Handle location selection from LocationPicker
   const handleLocationSelect = (locationData) => {
-    console.log('📍 Location selected in ReportPage:', locationData)
+    logDebug('Location selected in ReportPage', 'ReportPage', locationData)
     setSelectedLocation(locationData)
     
     // Update form data with the address
@@ -139,8 +141,9 @@ function ReportPage() {
     e.preventDefault()
     
     // Validate form
-    if (!validateForm()) {
-      console.log('❌ Form validation failed:', formErrors)
+    const formErrors = validateForm()
+    if (Object.keys(formErrors).length > 0) {
+      logError('Form validation failed', 'ReportPage', formErrors)
       return
     }
     
@@ -152,18 +155,18 @@ function ReportPage() {
       if (selectedLocation) {
         // Use manually selected location (priority)
         coordinates = [selectedLocation.lng, selectedLocation.lat]
+        logDebug('Using manually selected location', 'ReportPage', coordinates)
         locationSource = selectedLocation.source
-        console.log('🚀 Using manually selected location:', coordinates)
       } else if (userLocation) {
         // Fallback to user's GPS location
         coordinates = [userLocation.lng, userLocation.lat]
+        logDebug('Using GPS fallback location', 'ReportPage', coordinates)
         locationSource = 'GPS'
-        console.log('🚀 Using GPS fallback location:', coordinates)
       } else {
         // Final fallback to Dhaka center
         coordinates = [90.4125, 23.8103]
+        logDebug('Using default Dhaka location', 'ReportPage', coordinates)
         locationSource = 'default'
-        console.log('🚀 Using default Dhaka location:', coordinates)
       }
 
       // Enhanced report data structure matching backend schema
@@ -188,7 +191,7 @@ function ReportPage() {
         femaleSafetyMode: showFemaleSafetyMode
       }
 
-      console.log('🚀 Submitting report with enhanced data:', reportData)
+      logInfo('Submitting report with enhanced data', 'ReportPage', reportData)
 
       await submitReport(reportData)
       
@@ -206,7 +209,7 @@ function ReportPage() {
       // Scroll to top to show success message
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
-      console.error('Failed to submit report:', err)
+      logError('Failed to submit report', 'ReportPage', err)
     }
   }
 

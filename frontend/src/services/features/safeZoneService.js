@@ -4,6 +4,7 @@
 
 import apiClient from '../core/apiClient.js';
 import { calculateDistance, calculateRouteSafetyScore } from '../utils/geoUtils.js';
+import logger, { logDebug, logError, logInfo } from '../utils/logger.js';
 
 class SafeZoneService {
   constructor() {
@@ -318,7 +319,7 @@ class SafeZoneService {
     const cached = apiClient._safeZoneCache.get(cacheKey);
     
     if (cached && (Date.now() - cached.timestamp) < apiClient._cacheExpiry) {
-      console.log('🔄 Using cached safe zones data');
+      logDebug('Using cached safe zones data', 'SafeZoneService', { cacheKey });
       return cached.data;
     }
 
@@ -339,7 +340,7 @@ class SafeZoneService {
     } catch (error) {
       // If fresh fetch fails, return stale cache if available
       if (cached) {
-        console.warn('⚠️ Using stale cache due to fetch error:', error.message);
+        logError('Using stale cache due to fetch error', 'SafeZoneService', { error: error.message, cacheKey });
         return cached.data;
       }
       throw error;

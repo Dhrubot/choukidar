@@ -9,6 +9,7 @@ import apiService from '../services/api'
 import ModerationQueue from '../components/Admin/ModerationQueue'
 import SecurityDashboard from '../components/Admin/SecurityDashboard'
 import AdminSafeZoneManager from '../components/Admin/AdminSafeZoneManager'
+import logger, { logInfo, logError } from '../services/utils/logger'
 
 function AdminPage() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -63,7 +64,7 @@ function AdminPage() {
           setRecentActivity(recent)
         }
       } catch (err) {
-        console.log('getAllAdminReports not available, using pending reports for activity')
+        logInfo('getAllAdminReports not available, using pending reports for activity', 'AdminPage')
         // Fallback to pending reports
         const reportsResponse = await apiService.getAdminReports()
         if (reportsResponse.success) {
@@ -86,7 +87,7 @@ function AdminPage() {
       setError(null)
     } catch (err) {
       setError(err.message)
-      console.error('Error fetching dashboard data:', err)
+      logError('Error fetching dashboard data', 'AdminPage', err)
     } finally {
       setLoading(false)
     }

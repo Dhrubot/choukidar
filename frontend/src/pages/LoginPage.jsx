@@ -8,6 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Shield, ArrowLeft, Globe, AlertTriangle, Lock } from 'lucide-react';
 import AdminLogin from '../components/Auth/AdminLogin';
 import { useAuth } from '../contexts/AuthContext'; // Single import for enhanced context
+import logger, { logDebug, logInfo } from '../services/utils/logger';
 
 /**
  * LoginPage Component
@@ -25,20 +26,20 @@ const LoginPage = () => {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated && isAdmin) {
-      console.log('✅ Already authenticated, redirecting to:', redirectTo);
+      logDebug(`Already authenticated, redirecting to: ${redirectTo}`, 'LoginPage')
       navigate(redirectTo, { replace: true });
     }
   }, [isAuthenticated, isAdmin, redirectTo, navigate]);
   
   // Handle successful login
   const handleLoginSuccess = (user) => {
-    console.log('✅ Login successful, redirecting to:', redirectTo);
+    logInfo(`Login successful, redirecting to: ${redirectTo}`, 'LoginPage')
     navigate(redirectTo, { replace: true });
   };
   
   // Handle login error
   const handleLoginError = (error) => {
-    console.error('❌ Login error:', error);
+    logger.error('❌ Login error:', error);
     // Error handling is done in the AdminLogin component
   };
   
