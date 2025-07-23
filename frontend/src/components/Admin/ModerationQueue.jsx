@@ -51,8 +51,11 @@ const ModerationQueue = () => {
         let filteredReports = reportsData;
 
         // Apply status filter
-        if (filterStatus !== 'all' && filterStatus !== 'pending') {
+        if (filterStatus !== 'all') {
           filteredReports = filteredReports.filter(report => {
+            if (filterStatus === 'pending') {
+              return report.status === 'pending' || !report.status; // Include reports without status (default pending)
+            }
             if (filterStatus === 'flagged') {
               return report.securityFlags?.crossBorderReport || 
                      report.securityFlags?.potentialSpam ||

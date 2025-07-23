@@ -656,13 +656,49 @@ router.get('/security/insights', RoleMiddleware.apply(RoleMiddleware.adminOnly),
   try {
     const userId = req.userContext.user._id;
     
-    // Get security-related statistics
+    // Get device fingerprint statistics
+    const DeviceFingerprint = require('../models/DeviceFingerprint');
+    const totalDevices = await DeviceFingerprint.countDocuments();
+    const quarantinedDevices = await DeviceFingerprint.countDocuments({ 
+      'securityProfile.quarantineStatus': true 
+    });
+    
+    // Calculate trust score average
+    const trustScores = await DeviceFingerprint.find({
+      'securityProfile.overallTrustScore': { $exists: true }
+    }).select('securityProfile.overallTrustScore').lean();
+    
+    const trustScoreAverage = trustScores.length > 0 
+      ? trustScores.reduce((sum, device) => sum + (device.securityProfile?.overallTrustScore || 0), 0) / trustScores.length
+      : 0;
+
+    // Calculate risk distribution
+    const riskDistribution = {
+      low: await DeviceFingerprint.countDocuments({ 'securityProfile.riskLevel': 'low' }),
+      medium: await DeviceFingerprint.countDocuments({ 'securityProfile.riskLevel': 'medium' }),
+      high: await DeviceFingerprint.countDocuments({ 'securityProfile.riskLevel': 'high' }),
+      critical: await DeviceFingerprint.countDocuments({ 'securityProfile.riskLevel': 'critical' })
+    };
+
+    // Get recent security events for active threats count
+    const recentThreats = await AuditLog.countDocuments({
+      actionType: { $in: ['security_violation', 'suspicious_activity', 'account_locked'] },
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
+    });
+
+    // Structure data to match frontend expectations
     const insights = {
+      totalDevices,
+      quarantinedDevices,
+      activeThreats: recentThreats,
+      trustScoreAverage,
+      riskDistribution,
+      // Legacy structure for backward compatibility
       devices: {
-        total: 0,
-        trusted: 0,
-        suspicious: 0,
-        quarantined: 0
+        total: totalDevices,
+        trusted: totalDevices - quarantinedDevices,
+        suspicious: quarantinedDevices,
+        quarantined: quarantinedDevices
       },
       sessions: {
         active: 0,
@@ -670,8 +706,8 @@ router.get('/security/insights', RoleMiddleware.apply(RoleMiddleware.adminOnly),
         revoked: 0
       },
       threats: {
-        blocked: 0,
-        detected: 0,
+        blocked: recentThreats,
+        detected: recentThreats,
         resolved: 0
       },
       recentActivity: []

@@ -213,18 +213,56 @@ class SafeZoneService {
         result.analysis.safeZones = { error: safeZones.reason?.message };
       }
 
-      // Process reports data (simplified)
+      // Process reports data for threat analysis
       if (reports.status === 'fulfilled') {
         const reportsData = reports.value.data || [];
+        
+        // Analyze for coordinated attacks (reports from same IP/location within short time)
+        const coordinatedAttacks = [];
+        const recentReports = reportsData.filter(r => 
+          new Date(r.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+        );
+        
+        // Group by location proximity and time
+        const locationGroups = {};
+        recentReports.forEach(report => {
+          if (report.location?.coordinates) {
+            const key = `${Math.round(report.location.coordinates[1] * 100)}_${Math.round(report.location.coordinates[0] * 100)}`;
+            if (!locationGroups[key]) locationGroups[key] = [];
+            locationGroups[key].push(report);
+          }
+        });
+        
+        // Identify coordinated attacks (3+ reports in same area within 2 hours)
+        Object.values(locationGroups).forEach(group => {
+          if (group.length >= 3) {
+            const timeSpread = Math.max(...group.map(r => new Date(r.createdAt))) - 
+                             Math.min(...group.map(r => new Date(r.createdAt)));
+            if (timeSpread <= 2 * 60 * 60 * 1000) { // 2 hours
+              coordinatedAttacks.push({
+                type: 'Coordinated Reporting Campaign',
+                location: group[0].location,
+                count: group.length,
+                severity: 'high',
+                timestamp: group[0].createdAt,
+                description: `${group.length} reports in same area within 2 hours`
+              });
+            }
+          }
+        });
+        
         result.analysis.incidents = {
           total: reportsData.length,
-          recent: reportsData.filter(r => {
-            const days = (Date.now() - new Date(r.createdAt || r.timestamp)) / (1000 * 60 * 60 * 24);
-            return days <= 30;
-          }).length
+          recent: recentReports.length,
+          coordinatedAttacks,
+          crossBorderThreats: [] // Placeholder for cross-border analysis
         };
       } else {
-        result.analysis.incidents = { error: reports.reason?.message };
+        result.analysis.incidents = { 
+          error: reports.reason?.message,
+          coordinatedAttacks: [],
+          crossBorderThreats: []
+        };
       }
 
       // Process analytics

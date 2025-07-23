@@ -283,11 +283,22 @@ const SecurityDashboard = () => {
       // Fetch threat analysis (enhanced to include geographic threats)
       const threatsResponse = await apiService.getAreaAnalysis();
       if (threatsResponse.success) {
+        // Extract threat data from nested structure
+        const incidentsData = threatsResponse.data?.analysis?.incidents || {};
         setThreatAnalysis({
-          ...threatsResponse.data,
+          coordinatedAttacks: incidentsData.coordinatedAttacks || [],
+          crossBorderThreats: incidentsData.crossBorderThreats || [],
           // Ensure backward compatibility
-          geographicThreats: threatsResponse.geographicThreats || [],
-          suspiciousPatterns: threatsResponse.suspiciousPatterns || []
+          geographicThreats: incidentsData.coordinatedAttacks || [],
+          suspiciousPatterns: incidentsData.crossBorderThreats || []
+        });
+      } else {
+        // Set empty arrays to prevent crashes
+        setThreatAnalysis({
+          coordinatedAttacks: [],
+          crossBorderThreats: [],
+          geographicThreats: [],
+          suspiciousPatterns: []
         });
       }
 

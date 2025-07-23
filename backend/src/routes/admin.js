@@ -58,7 +58,8 @@ router.get('/dashboard', requirePermission('view_admin_analytics'), async (req, 
     const securityStats = {
       crossBorderReports: await Report.countDocuments({ 'securityFlags.crossBorderReport': true }),
       potentialSpam: await Report.countDocuments({ 'securityFlags.potentialSpam': true }),
-      flaggedForReview: await Report.countDocuments({ status: { $in: ['flagged', 'under_review'] } })
+      flaggedForReview: await Report.countDocuments({ status: { $in: ['flagged', 'under_review'] } }),
+      bangladeshReports: await Report.countDocuments({ 'location.withinBangladesh': true })
     };
 
     // Add source breakdown for frontend compatibility
