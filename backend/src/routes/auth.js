@@ -651,4 +651,74 @@ router.delete('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly),
   }
 });
 
+// GET /api/auth/security/insights - Get security insights for admin dashboard
+router.get('/security/insights', RoleMiddleware.apply(RoleMiddleware.adminOnly), async (req, res) => {
+  try {
+    const userId = req.userContext.user._id;
+    
+    // Get security-related statistics
+    const insights = {
+      devices: {
+        total: 0,
+        trusted: 0,
+        suspicious: 0,
+        quarantined: 0
+      },
+      sessions: {
+        active: 0,
+        expired: 0,
+        revoked: 0
+      },
+      threats: {
+        blocked: 0,
+        detected: 0,
+        resolved: 0
+      },
+      recentActivity: []
+    };
+
+    // Get recent audit logs for security insights
+    const recentLogs = await AuditLog.find({
+      actionType: { $in: ['login', 'logout', 'failed_login', 'account_locked'] }
+    })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+    insights.recentActivity = recentLogs.map(log => ({
+      id: log._id,
+      action: log.actionType,
+      timestamp: log.createdAt,
+      actor: log.actor?.username || 'Unknown',
+      outcome: log.outcome,
+      severity: log.severity
+    }));
+
+    // Log this action
+    await logAuthAction(
+      { 
+        userId: req.userContext.user._id,
+        username: req.userContext.user?.roleData?.admin?.username,
+        ipAddress: req.ip 
+      },
+      'data_export',
+      'success',
+      { action: 'view_security_insights' },
+      'low'
+    );
+
+    res.json({
+      success: true,
+      data: insights
+    });
+  } catch (error) {
+    console.error('❌ Error fetching security insights:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching security insights',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

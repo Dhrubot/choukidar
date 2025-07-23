@@ -61,14 +61,30 @@ router.get('/dashboard', requirePermission('view_admin_analytics'), async (req, 
       flaggedForReview: await Report.countDocuments({ status: { $in: ['flagged', 'under_review'] } })
     };
 
+    // Add source breakdown for frontend compatibility
+    const sourceBreakdown = await Report.aggregate([
+      {
+        $group: {
+          _id: '$type',
+          count: { $sum: 1 }
+        }
+      },
+          { $sort: { count: -1 } },
+          { $limit: 5 }
+        ]);
+
     // Log this action
-    await logAdminAction(req, 'view_admin_analytics', { dashboard: 'main' }, 'low');
+    await logAdminAction(req, 'data_export', { 
+      action: 'view_dashboard_analytics', 
+      dashboard: 'main' 
+    }, 'low');
 
     res.json({
       success: true,
       data: {
         ...basicStats,
         security: securityStats,
+        sourceBreakdown
       }
     });
   } catch (error) {
@@ -96,7 +112,7 @@ router.get('/reports/flagged', requirePermission('moderate_content'), async (req
     .sort({ 'moderation.priorityLevel': -1, timestamp: -1 });
 
     // Log this action
-    await logAdminAction(req, 'view_flagged_reports', { count: flaggedReports.length }, 'medium');
+    await logAdminAction(req, 'data_export', { action: 'view_flagged_reports', count: flaggedReports.length }, 'medium');
 
     res.json({
       success: true,
@@ -108,6 +124,152 @@ router.get('/reports/flagged', requirePermission('moderate_content'), async (req
     res.status(500).json({
       success: false,
       message: 'Error fetching flagged reports',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/admin/reports - Get reports for moderation queue (alias for /reports/all)
+router.get('/reports', requirePermission('view_all_reports'), async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Build filter
+    const filter = {};
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status;
+    }
+    if (req.query.severity && req.query.severity !== 'all') {
+      filter.severity = req.query.severity;
+    }
+
+    // Get reports with pagination
+    const reports = await Report.find(filter)
+      .populate('submittedBy.userId', 'username userType')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = await Report.countDocuments(filter);
+
+    // Log this action
+    await logAdminAction(req, 'data_export', { 
+      action: 'view_moderation_queue',
+      filters: filter,
+      pagination: { page, limit }
+    }, 'low');
+
+    res.json({
+      success: true,
+      data: {
+        reports,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching reports for moderation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching reports',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/admin/reports/all - Get all reports for admin dashboard
+router.get('/reports/all', requirePermission('view_all_reports'), async (req, res) => {
+  try {
+    const { page = 1, limit = 50, status, severity, sortBy = 'timestamp', sortOrder = 'desc' } = req.query;
+    
+    // Build filter object
+    const filter = {};
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+    if (severity && severity !== 'all') {
+      filter.severity = severity;
+    }
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Execute query with pagination
+    const reports = await Report.find(filter)
+      .select('+location.originalCoordinates')
+      .sort(sort)
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .populate('submittedBy.userId', 'username userType')
+      .lean();
+
+    const totalReports = await Report.countDocuments(filter);
+    const totalPages = Math.ceil(totalReports / limit);
+
+    // Log this action
+    await logAdminAction(req, 'data_export', { 
+      action: 'view_all_reports', 
+      count: reports.length,
+      filters: filter 
+    }, 'low');
+
+    res.json({
+      success: true,
+      data: reports,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalReports,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching all reports:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching reports',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/admin/verify - Verify admin session for token restoration
+router.get('/verify', requirePermission('admin_access'), async (req, res) => {
+  try {
+    // If we reach here, the middleware has already verified the token and user
+    const user = req.userContext.user;
+    
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        username: user.roleData?.admin?.username,
+        email: user.roleData?.admin?.email,
+        permissions: user.roleData?.admin?.permissions || [],
+        adminLevel: user.roleData?.admin?.adminLevel || 1
+      },
+      securityContext: {
+        deviceFingerprint: req.userContext.deviceFingerprint?.fingerprintId,
+        ipAddress: req.ip,
+        lastActivity: new Date()
+      },
+      preferences: user.roleData?.admin?.preferences || {},
+      refreshToken: req.userContext.refreshToken // If available
+    });
+  } catch (error) {
+    console.error('❌ Error verifying admin session:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error verifying session',
       error: error.message
     });
   }
@@ -142,7 +304,7 @@ router.get('/analytics/security', requirePermission('view_security_analytics'), 
     ]);
 
     // Log this action
-    await logAdminAction(req, 'view_security_analytics', { source: 'reports' }, 'medium');
+    await logAdminAction(req, 'data_export', { action: 'view_security_analytics', count: statusBreakdown.length }, 'medium');
 
     res.json({
       success: true,
