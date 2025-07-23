@@ -52,16 +52,22 @@ router.post('/admin/login', loginLimiter, async (req, res) => {
     
     const adminUser = await User.findOne({
       userType: 'admin',
-      'roleData.admin.username': username
+      $or: [
+        { 'roleData.admin.username': username },
+        { 'roleData.admin.email': username }
+      ]
     });
     
     if (!adminUser) {
+      console.log(`❌ Admin login failed: No admin user found with username/email: ${username}`);
       await logAuthAction(actor, 'admin_login', 'failure', { reason: 'Invalid username' }, 'medium');
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
     }
+    
+    console.log(`✅ Admin user found: ${adminUser.roleData.admin.username} (${adminUser.roleData.admin.email})`);
     
     actor.userId = adminUser._id;
     actor.userType = 'admin';
