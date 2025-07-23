@@ -9,19 +9,26 @@ function Home() {
   const [stats, setStats] = useState({
     totalReports: 0,
     approvedReports: 0,
-    activeUsers: 500
+    activeUsers: 500,
+    safeZones: 0
   })
 
   useEffect(() => {
-    // Fetch stats from API
-    apiService.getStats()
+    // Fetch reports - backend already filters for approved/verified reports for public users
+    apiService.getReports()
       .then(data => {
         if (data.success) {
-          setStats(prev => ({
-            ...prev,
-            approvedReports: data.count,
-            totalReports: data.count + 15 // Simulate total including pending
-          }))
+          // Reports are already filtered to approved/verified by backend
+          const reports = data.data || []
+          const totalApprovedReports = reports.length
+          const activeUsers = new Set(reports.map(r => r.userId)).size
+          
+          setStats({
+            totalReports: totalApprovedReports, // These are all approved reports
+            approvedReports: totalApprovedReports, // Same as total since backend filters
+            activeUsers,
+            safeZones: 0 // Could fetch from safe zones API if needed
+          })
         }
       })
       .catch(err => logError('Error fetching stats', 'HomePage', err))
