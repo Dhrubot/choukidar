@@ -15,6 +15,7 @@ const FilterPresets = ({
   loadFilterPreset,
   deleteFilterPreset,
   onSharePreset,
+  onMapViewportChange, // NEW: Added onMapViewportChange prop
   className = ""
 }) => {
   const [activeTab, setActiveTab] = useState('presets')
@@ -26,8 +27,20 @@ const FilterPresets = ({
   const handleLoadPreset = useCallback((presetId) => {
     if (loadFilterPreset) {
       loadFilterPreset(presetId)
+      
+      // NEW: Trigger map viewport adjustment after preset is loaded
+      if (onMapViewportChange) {
+        // Small delay to allow filter to be applied first
+        setTimeout(() => {
+          onMapViewportChange({
+            type: 'preset_loaded',
+            presetId: presetId,
+            action: 'fit_filtered_data'
+          })
+        }, 300)
+      }
     }
-  }, [loadFilterPreset])
+  }, [loadFilterPreset, onMapViewportChange])
 
   // Handle preset deletion confirmation
   const handleDeleteClick = useCallback((preset, event) => {
@@ -131,6 +144,26 @@ const FilterPresets = ({
     if (diffDays < 7) return `${diffDays}d ago`
     return past.toLocaleDateString()
   }, [])
+
+  // Handle history item loading
+  const handleLoadHistoryItem = useCallback((historyItem) => {
+    if (loadFilterPreset) {
+      // Load the historical filter state
+      loadFilterPreset(historyItem.id, historyItem.filters)
+      
+      // NEW: Trigger map viewport adjustment for history
+      if (onMapViewportChange) {
+        setTimeout(() => {
+          onMapViewportChange({
+            type: 'history_loaded',
+            historyId: historyItem.id,
+            action: 'fit_filtered_data',
+            timestamp: historyItem.timestamp
+          })
+        }, 300)
+      }
+    }
+  }, [loadFilterPreset, onMapViewportChange])
 
   return (
     <div className={`filter-presets bg-white rounded-lg shadow-md border border-neutral-200 ${className}`}>
@@ -312,7 +345,7 @@ const FilterPresets = ({
                 <div
                   key={`${historyItem.id}-${index}`}
                   className="border border-neutral-200 rounded-lg p-3 hover:border-bangladesh-green hover:bg-bangladesh-green/5 transition-all duration-200 cursor-pointer"
-                  onClick={() => handleLoadPreset(historyItem.id)}
+                  onClick={() => handleLoadHistoryItem(historyItem)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
@@ -337,7 +370,7 @@ const FilterPresets = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleLoadPreset(historyItem.id)
+                        handleLoadHistoryItem(historyItem)
                       }}
                       className="ml-3 p-2 text-bangladesh-green hover:bg-bangladesh-green hover:text-white rounded transition-colors"
                       title="Apply these filters"

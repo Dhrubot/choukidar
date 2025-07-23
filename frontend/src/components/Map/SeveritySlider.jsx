@@ -1,10 +1,10 @@
 // === frontend/src/components/Map/SeveritySlider.jsx ===
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { AlertTriangle, Shield, TrendingUp, Info } from 'lucide-react'
+import { AlertTriangle, Shield, TrendingUp, Info, Eye } from 'lucide-react'
 
 /**
  * Custom Severity Range Slider for SafeStreets Bangladesh - React 19 Compatible
- * Features: Visual risk indicators, crime severity mapping, mobile optimization
+ * Features: Visual risk indicators, crime severity mapping, mobile optimization, visual feedback
  */
 const SeveritySlider = ({ 
   severityRange = [1, 5],
@@ -13,13 +13,16 @@ const SeveritySlider = ({
   className = "",
   disabled = false,
   showStats = true,
-  showLabels = true
+  showLabels = true,
+  onVisualFeedback = null // NEW: Callback for visual feedback on map
 }) => {
   const [isDragging, setIsDragging] = useState(false)
   const [activeThumb, setActiveThumb] = useState(null) // 'min' or 'max'
+  const [showFeedback, setShowFeedback] = useState(false) // NEW: Visual feedback state
   const sliderRef = useRef(null)
   const minThumbRef = useRef(null)
   const maxThumbRef = useRef(null)
+  const feedbackTimeoutRef = useRef(null) // NEW: Timeout for feedback
 
   // Severity level configuration with Bangladesh crime context
   const severityLevels = useMemo(() => [
@@ -108,6 +111,35 @@ const SeveritySlider = ({
     return Math.round((percent / 100) * 4 + 1)
   }, [])
 
+  // Enhanced change handler with visual feedback
+  const handleSeverityChange = useCallback((newRange) => {
+    if (onSeverityChange) {
+      onSeverityChange(newRange)
+    }
+    
+    // NEW: Trigger visual feedback
+    if (onVisualFeedback) {
+      setShowFeedback(true)
+      onVisualFeedback({
+        type: 'severity_change',
+        severityRange: newRange,
+        affectedReports: Object.entries(reportCounts)
+          .filter(([level]) => level >= newRange[0] && level <= newRange[1])
+          .reduce((sum, [, count]) => sum + count, 0)
+      })
+      
+      // Clear previous timeout
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current)
+      }
+      
+      // Hide feedback after 2 seconds
+      feedbackTimeoutRef.current = setTimeout(() => {
+        setShowFeedback(false)
+      }, 2000)
+    }
+  }, [onSeverityChange, onVisualFeedback, reportCounts])
+
   // Handle mouse/touch events
   const handlePointerDown = useCallback((event, thumb) => {
     event.preventDefault()
@@ -130,9 +162,7 @@ const SeveritySlider = ({
         newRange = [currentMin, Math.max(newValue, currentMin)]
       }
       
-      if (onSeverityChange && (newRange[0] !== currentMin || newRange[1] !== currentMax)) {
-        onSeverityChange(newRange)
-      }
+      handleSeverityChange(newRange)
     }
     
     const handlePointerUp = () => {
@@ -148,7 +178,7 @@ const SeveritySlider = ({
     document.addEventListener('mouseup', handlePointerUp)
     document.addEventListener('touchmove', handlePointerMove)
     document.addEventListener('touchend', handlePointerUp)
-  }, [severityRange, onSeverityChange, percentToValue])
+  }, [severityRange, handleSeverityChange, percentToValue])
 
   // Handle slider track click
   const handleTrackClick = useCallback((event) => {
@@ -170,10 +200,8 @@ const SeveritySlider = ({
       newRange = [currentMin, newValue]
     }
     
-    if (onSeverityChange) {
-      onSeverityChange(newRange)
-    }
-  }, [severityRange, onSeverityChange, percentToValue, isDragging])
+    handleSeverityChange(newRange)
+  }, [severityRange, handleSeverityChange, percentToValue, isDragging])
 
   // Handle preset selection
   const handlePresetClick = useCallback((preset) => {
@@ -185,9 +213,9 @@ const SeveritySlider = ({
     }
     
     if (presets[preset] && onSeverityChange) {
-      onSeverityChange(presets[preset])
+      handleSeverityChange(presets[preset])
     }
-  }, [onSeverityChange])
+  }, [onSeverityChange, handleSeverityChange])
 
   // Calculate thumb positions
   const minPercent = valueToPercent(severityRange[0])
@@ -320,8 +348,18 @@ const SeveritySlider = ({
       </div>
 
       {/* Custom Slider */}
-      <div className="mb-6">
-        <div className="relative px-2">
+      <div className="mb-6 relative">
+        {/* NEW: Visual Feedback Indicator */}
+        {showFeedback && (
+          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg animate-pulse">
+            <Eye className="w-3 h-3 inline mr-1" />
+            Highlighting {Object.entries(reportCounts)
+              .filter(([level]) => level >= severityRange[0] && level <= severityRange[1])
+              .reduce((sum, [, count]) => sum + count, 0)} reports
+          </div>
+        )}
+        
+        <div className="px-2">
           {/* Slider Track */}
           <div
             ref={sliderRef}

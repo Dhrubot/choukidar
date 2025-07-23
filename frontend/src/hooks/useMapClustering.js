@@ -44,6 +44,49 @@ export const useMapClustering = (reports = [], options = {}) => {
     ...options
   }), [options])
 
+  // Dynamic clustering configuration based on dataset size
+  const dynamicConfig = useMemo(() => {
+    const datasetSize = reports.length
+    let adjustedConfig = { ...defaultConfig }
+    
+    // Adjust clustering parameters based on dataset size
+    if (datasetSize < 50) {
+      // Small dataset - minimal clustering for better visibility
+      adjustedConfig.maxClusterRadius = 30
+      adjustedConfig.disableClusteringAtZoom = 14
+      adjustedConfig.zoomThresholds = {
+        6: { radius: 40, maxZoom: 8 },
+        8: { radius: 30, maxZoom: 10 },
+        10: { radius: 20, maxZoom: 12 },
+        12: { radius: 15, maxZoom: 14 },
+        14: { radius: 10, maxZoom: 16 }
+      }
+    } else if (datasetSize < 200) {
+      // Medium dataset - moderate clustering
+      adjustedConfig.maxClusterRadius = 50
+      adjustedConfig.disableClusteringAtZoom = 15
+    } else if (datasetSize < 1000) {
+      // Large dataset - standard clustering
+      adjustedConfig.maxClusterRadius = 80
+      adjustedConfig.disableClusteringAtZoom = 16
+    } else {
+      // Very large dataset - aggressive clustering for performance
+      adjustedConfig.maxClusterRadius = 120
+      adjustedConfig.disableClusteringAtZoom = 17
+      adjustedConfig.animate = false // Disable animations for performance
+      adjustedConfig.animateAddingMarkers = false
+      adjustedConfig.zoomThresholds = {
+        6: { radius: 120, maxZoom: 8 },
+        8: { radius: 100, maxZoom: 10 },
+        10: { radius: 80, maxZoom: 12 },
+        12: { radius: 60, maxZoom: 14 },
+        14: { radius: 40, maxZoom: 16 }
+      }
+    }
+    
+    return adjustedConfig
+  }, [reports.length, defaultConfig])
+
   // Hybrid clustering weight calculation
   const calculateClusterWeight = useCallback((report) => {
     // Base weight from severity (1-5 scale)
@@ -200,15 +243,15 @@ export const useMapClustering = (reports = [], options = {}) => {
     lastZoomLevel.current = currentZoom
     
     // Get zoom-appropriate configuration
-    const zoomConfig = Object.keys(defaultConfig.zoomThresholds)
+    const zoomConfig = Object.keys(dynamicConfig.zoomThresholds)
       .reverse()
       .find(zoom => currentZoom >= parseInt(zoom))
     
-    const activeConfig = defaultConfig.zoomThresholds[zoomConfig] || 
-                        defaultConfig.zoomThresholds[14]
+    const activeConfig = dynamicConfig.zoomThresholds[zoomConfig] || 
+                        dynamicConfig.zoomThresholds[14]
 
     const clusterGroup = L.markerClusterGroup({
-      ...defaultConfig,
+      ...dynamicConfig,
       maxClusterRadius: activeConfig.radius,
       disableClusteringAtZoom: activeConfig.maxZoom,
       iconCreateFunction: createClusterIcon,
@@ -225,7 +268,7 @@ export const useMapClustering = (reports = [], options = {}) => {
 
     clusterGroupRef.current = clusterGroup
     return clusterGroup
-  }, [defaultConfig, createClusterIcon])
+  }, [dynamicConfig, createClusterIcon])
 
   // Process reports into clustered markers
   const processReports = useCallback(async (reports, map) => {

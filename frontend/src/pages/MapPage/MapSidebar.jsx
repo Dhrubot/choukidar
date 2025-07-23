@@ -51,7 +51,11 @@ const MapSidebar = memo(({
   // 🆕 PHASE 3B: INTELLIGENCE PROPS
   intelligenceFeatures = {},
   intelligenceStatus = {},
-  onToggleIntelligenceFeature = () => {}
+  onToggleIntelligenceFeature = () => {},
+  
+  // 🔧 FIXED: Added missing prop handlers that were referenced in the code
+  onVisualFeedback = () => {},
+  onMapViewportChange = () => {}
 }) => {
   // 🆕 PHASE 3B: LOCAL UI STATE FOR INTELLIGENCE CONTROLS
   const [showIntelligencePanel, setShowIntelligencePanel] = useState(false)
@@ -97,19 +101,15 @@ const MapSidebar = memo(({
           filters={filters}
           filteredReports={filteredReports}
           filterStats={filterStats}
-          filterPresets={filterPresets}
-          filterHistory={filterHistory}
           updateFilter={updateFilter}
           updateNestedFilter={updateNestedFilter}
           clearFilters={clearFilters}
           hasActiveFilters={hasActiveFilters}
           applyDatePreset={applyDatePreset}
           datePresets={datePresets}
-          saveFilterPreset={saveFilterPreset}
-          loadFilterPreset={loadFilterPreset}
-          deleteFilterPreset={deleteFilterPreset}
           isFiltering={isFiltering}
           isMobile={isMobile}
+          onVisualFeedback={onVisualFeedback}
         />
       )}
 
@@ -120,6 +120,9 @@ const MapSidebar = memo(({
           filterHistory={filterHistory}
           loadFilterPreset={loadFilterPreset}
           deleteFilterPreset={deleteFilterPreset}
+          saveFilterPreset={saveFilterPreset}
+          isMobile={isMobile}
+          onMapViewportChange={onMapViewportChange}
         />
       )}
 
@@ -388,7 +391,7 @@ const MapSidebar = memo(({
         <div className="bg-purple-600 p-4 rounded-t-xl">
           <h3 className="font-bold text-white flex items-center">
             <Target className="w-5 h-5 mr-2" />
-            Intelligent Controls
+            Map Controls
             {intelligenceStatus.hasActiveFeatures && (
               <div className="w-2 h-2 bg-white rounded-full ml-2 animate-pulse"></div>
             )}
@@ -400,7 +403,10 @@ const MapSidebar = memo(({
             onViewModeChange={onViewModeChange}
             heatmapOptions={mapState.heatmapOptions}
             onHeatmapOptionsChange={onHeatmapOptionsChange}
-            reportCount={filteredReports.length}
+            clusteringOptions={mapState.clusteringOptions}
+            onClusteringOptionsChange={onClusteringOptionsChange}
+            isMobile={isMobile}
+            onVisualFeedback={onVisualFeedback}
           />
 
           {/* 🔧 FIXED: RESTORED ALL ORIGINAL CLUSTERING OPTIONS */}

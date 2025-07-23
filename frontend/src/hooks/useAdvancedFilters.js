@@ -173,14 +173,47 @@ export const useAdvancedFilters = (reports = [], options = {}) => {
     try {
       let filtered = [...inputReports]
 
-      // Text search (debounced)
+      // Enhanced text search with comprehensive location data
       if (debouncedSearchTerm) {
         const searchLower = debouncedSearchTerm.toLowerCase()
-        filtered = filtered.filter(report => 
-          report.description?.toLowerCase().includes(searchLower) ||
-          report.location?.address?.toLowerCase().includes(searchLower) ||
-          report.type?.toLowerCase().includes(searchLower)
-        )
+        filtered = filtered.filter(report => {
+          // Basic fields search (existing)
+          const basicMatch = 
+            report.description?.toLowerCase().includes(searchLower) ||
+            report.location?.address?.toLowerCase().includes(searchLower) ||
+            report.type?.toLowerCase().includes(searchLower)
+          
+          // Enhanced location data search (NEW)
+          const locationMatch = 
+            report.location?.district?.toLowerCase().includes(searchLower) ||
+            report.location?.division?.toLowerCase().includes(searchLower) ||
+            report.location?.upazila?.toLowerCase().includes(searchLower) ||
+            report.location?.union?.toLowerCase().includes(searchLower) ||
+            report.location?.ward?.toLowerCase().includes(searchLower) ||
+            report.location?.area?.toLowerCase().includes(searchLower) ||
+            report.location?.landmark?.toLowerCase().includes(searchLower) ||
+            report.location?.street?.toLowerCase().includes(searchLower) ||
+            report.location?.neighborhood?.toLowerCase().includes(searchLower) ||
+            report.location?.locality?.toLowerCase().includes(searchLower)
+          
+          // Coordinate-based area search (NEW)
+          const coordinateMatch = report.location?.coordinates && 
+            (report.location.coordinates[0]?.toString().includes(searchLower) ||
+             report.location.coordinates[1]?.toString().includes(searchLower))
+          
+          // Administrative area search (NEW)
+          const adminMatch = 
+            report.administrativeArea?.district?.toLowerCase().includes(searchLower) ||
+            report.administrativeArea?.thana?.toLowerCase().includes(searchLower) ||
+            report.administrativeArea?.policeStation?.toLowerCase().includes(searchLower)
+          
+          // Tags and keywords search (NEW)
+          const tagMatch = 
+            report.tags?.some(tag => tag.toLowerCase().includes(searchLower)) ||
+            report.keywords?.some(keyword => keyword.toLowerCase().includes(searchLower))
+          
+          return basicMatch || locationMatch || coordinateMatch || adminMatch || tagMatch
+        })
       }
 
       // Incident type filtering
