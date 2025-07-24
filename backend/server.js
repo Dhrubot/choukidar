@@ -26,22 +26,32 @@ app.use(cookieParser()); // IMPORTANT: Don't miss this
 // =================================================================
 // === TEMPORARY REQUEST LOGGER MIDDLEWARE =========================
 // =================================================================
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    console.log('--- Incoming Request ---');
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+// app.use((req, res, next) => {
+//   if (req.path.startsWith('/api')) {
+//     console.log('--- Incoming Request ---');
+//     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+//     console.log('Headers:', JSON.stringify(req.headers, null, 2));
     
-    if (req.body && Object.keys(req.body).length > 0) {
-      console.log('Body:', JSON.stringify(req.body, null, 2));
-    } else {
-      console.log('Body: [Empty]');
-    }
+//     if (req.body && Object.keys(req.body).length > 0) {
+//       console.log('Body:', JSON.stringify(req.body, null, 2));
+//     } else {
+//       console.log('Body: [Empty]');
+//     }
     
-    console.log('------------------------');
-  }
-  next();
-});
+//     console.log('------------------------');
+//   }
+//   next();
+// });
+const { productionLogger, requestLogger, errorLogger, securityLogger } = require('./src/utils/productionLogger');
+const { sanitizationMiddleware, securityHeaders } = require('./src/utils/sanitization');
+
+app.use(requestLogger());
+app.use(securityLogger());
+app.use(errorLogger());
+
+// SECURITY: Add input sanitization and security headers
+app.use(securityHeaders());
+app.use(sanitizationMiddleware());
 
 // ENHANCED: Security middleware - Apply device fingerprinting and user context to all requests
 app.use(userTypeDetection);
@@ -61,6 +71,8 @@ app.use((req, res, next) => {
   next();
 });
 
+// input sanitizers
+
 // Database connection
 mongoose.connect(process.env.MONGODB_URI);
 
@@ -68,19 +80,48 @@ mongoose.connect(process.env.MONGODB_URI);
 const server = http.createServer(app);
 
 // Database connection events with enhanced WebSocket initialization
-mongoose.connection.on('connected', () => {
-  console.log('✅ Connected to MongoDB');
-  console.log('🛡️ Security middleware active - Device fingerprinting enabled');
+// mongoose.connection.on('connected', () => {
+//   console.log('✅ Connected to MongoDB');
+//   console.log('🛡️ Security middleware active - Device fingerprinting enabled');
   
-  // Initialize WebSocket server after database connection
-  try {
-    const socketHandler = new SocketHandler(server);
-    app.locals.socketHandler = socketHandler; // Make accessible in routes
-    global.socketHandler = socketHandler;     // Also make globally available
-    console.log('🔌 WebSocket server initialized and ready');
-  } catch (error) {
-    console.error('❌ Failed to initialize WebSocket server:', error);
-  }
+//   // Initialize WebSocket server after database connection
+//   try {
+//     const socketHandler = new SocketHandler(server);
+//     app.locals.socketHandler = socketHandler; // Make accessible in routes
+//     global.socketHandler = socketHandler;     // Also make globally available
+//     console.log('🔌 WebSocket server initialized and ready');
+//   } catch (error) {
+//     console.error('❌ Failed to initialize WebSocket server:', error);
+//   }
+// });
+
+// // Check database optimization results
+// const optimizer = require('./src/models/optimizedIndexes');
+// optimizer.monitorPerformance(60000); // 1 minute monitoring
+
+// // Check cache performance
+// const cache = require('./src/middleware/cacheLayer');
+// cache.cacheHealthCheck();
+
+// // Check WebSocket stats
+// const socketHandler = global.socketHandler;
+// socketHandler.healthCheck();
+
+const { optimizeDatabase } = require('./src/models/optimizedIndexes');
+const { initializeCache } = require('./src/middleware/cacheLayer');
+
+mongoose.connection.on('connected', async () => {
+  console.log('✅ Connected to MongoDB');
+  
+  // Optimize database indexes
+  await optimizeDatabase();
+  
+  // Initialize Redis cache
+  await initializeCache();
+  
+  // Initialize scaled WebSocket handler
+  const ScaledSocketHandler = require('./src/websocket/scaledSocketHandler');
+  const socketHandler = new ScaledSocketHandler(server);
 });
 
 mongoose.connection.on('error', (err) => {
