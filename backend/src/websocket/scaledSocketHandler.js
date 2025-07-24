@@ -593,6 +593,49 @@ class ScaledSocketHandler {
   }
 
   /**
+   * Emit event specifically to admin users
+   * This method is expected by the reports route for admin notifications
+   */
+  async emitToAdmins(eventType, eventData) {
+    try {
+      if (!this.isInitialized) {
+        console.warn('⚠️ WebSocket not initialized, queuing admin event');
+        this.queueEvent('admin_notification', { eventType, eventData });
+        return;
+      }
+
+      // Emit to admin room
+      this.io.to('admin_global').emit(eventType, {
+        ...eventData,
+        timestamp: new Date().toISOString(),
+        serverInstance: process.env.SERVER_INSTANCE || 'primary'
+      });
+
+      // Also use the existing broadcastReportUpdate for report-related events
+      if (eventType === 'new_pending_report') {
+        await this.broadcastReportUpdate({
+          reportId: eventData.reportId,
+          type: eventData.type,
+          severity: eventData.severity,
+          location: eventData.location,
+          status: 'pending',
+          timestamp: eventData.timestamp
+        });
+      }
+
+      this.metrics.broadcastsSent++;
+      console.log(`👨‍💼 Admin notification sent: ${eventType}`);
+
+    } catch (error) {
+      console.error('❌ Error emitting to admins:', error);
+      this.metrics.errors++;
+      
+      // Queue for retry
+      this.queueEvent('admin_notification', { eventType, eventData });
+    }
+  }
+
+  /**
    * Redis connection management
    */
   async storeConnectionInRedis(connectionId, clientInfo) {

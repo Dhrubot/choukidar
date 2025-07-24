@@ -22,7 +22,7 @@ const hashIp = (ip) => {
 // Rate limiting for report submission
 const submitLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 requests per windowMs
+  max: process.env.NODE_ENV === 'test' || process.env.LOAD_TESTING === 'true' ? 1000 : 5, // limit each IP to 5 requests per windowMs
   message: {
     success: false,
     message: 'Too many reports submitted from this IP, please try again later.'
@@ -30,6 +30,10 @@ const submitLimit = rateLimit({
   keyGenerator: (req) => {
     // Use IP hash for rate limiting
     return hashIp(req.ip);
+  },
+  skip: (req) => {
+    // Skip rate limiting if load testing is enabled
+    return process.env.LOAD_TESTING === 'true' || process.env.NODE_ENV === 'test';
   }
 });
 
@@ -202,18 +206,22 @@ router.post('/', submitLimit, logUserActivity('submit_report'), async (req, res)
       console.warn('SocketHandler not available in app.locals. Cannot emit real-time updates.');
     }
 
-    // Log the action for audit purposes
-    await logAdminAction(req, 'submit_report', { reportId: newReport._id, type, severity }, 'medium');
+    // Log the action for audit purposes (only for authenticated users)
+    if (req.userContext?.user && req.userContext.user.userType !== 'anonymous') {
+      try {
+        await logAdminAction(req, 'submit_report', { reportId: newReport._id, type, severity }, 'medium');
+      } catch (auditError) {
+        console.warn('⚠️ Audit logging failed:', auditError.message);
+      }
+    }
 
     // Invalidate relevant caches after creating a new report
     await cacheLayer.deletePattern('reports:*');
     await cacheLayer.deletePattern('admin:*');
     await cacheLayer.deletePattern('safezones:analytics:*');
 
-    // Emit real-time event for new report
-    if (global.socketHandler) {
-      global.socketHandler.notifyNewReport(newReport);
-    }
+    // Real-time notifications are already handled by emitToAdmins above
+    // No need for additional global.socketHandler.notifyNewReport call
 
     res.status(201).json({ success: true, message: 'Report submitted successfully.', data: newReport });
 

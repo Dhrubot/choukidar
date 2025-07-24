@@ -795,8 +795,7 @@ router.get('/profile',
   async (req, res) => {
   try {
     const user = await User.findById(req.userContext.user._id)
-      .select('-password -refreshTokens')
-      .populate('deviceFingerprint', 'trustScore riskLevel');
+      .select('-password -refreshTokens');
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found.' });

@@ -26,4 +26,6 @@ dist-ssr
 backend/hash_password.js
 backend/scripts/createInitialAdmin.js
 backend/scripts/hash_password.js
-backend/tests/load-testing/
+backend/tests/load-testing
+
+

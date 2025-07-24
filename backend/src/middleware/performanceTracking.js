@@ -137,32 +137,15 @@ const trackCacheOperation = (originalMethod, operation) => {
 
 /**
  * Initialize Performance Tracking
- * Sets up automatic tracking for database and cache operations
+ * Sets up monitoring for database and cache operations
  */
 const initializePerformanceTracking = () => {
-  // Only enable in production or when explicitly enabled
-  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_MONITORING !== 'true') {
-    console.log('📊 Performance monitoring disabled (development mode)');
-    return;
-  }
+  console.log('🔧 Initializing performance tracking...');
 
-  console.log('📊 Initializing performance monitoring...');
-
-  // Track Mongoose operations
-  const mongoose = require('mongoose');
-  if (mongoose.Query) {
-    // Wrap common query methods
-    const queryMethods = ['find', 'findOne', 'findById', 'aggregate', 'countDocuments', 'updateOne', 'updateMany', 'deleteOne', 'deleteMany'];
-    
-    queryMethods.forEach(method => {
-      if (mongoose.Query.prototype[method]) {
-        const original = mongoose.Query.prototype[method];
-        mongoose.Query.prototype[method] = trackDatabaseQuery(original, method, 'query');
-      }
-    });
-  }
-
-  // Track cache operations if available
+  // Note: Removed automatic Mongoose query wrapping to prevent "Query was already executed" errors
+  // Database performance will be tracked manually in routes where needed
+  
+  // Initialize cache operation tracking
   try {
     const { cacheLayer } = require('../middleware/cacheLayer');
     
@@ -175,7 +158,7 @@ const initializePerformanceTracking = () => {
     console.warn('⚠️ Could not initialize cache tracking:', error.message);
   }
 
-  console.log('✅ Performance monitoring initialized');
+  console.log('✅ Performance monitoring initialized (manual DB tracking mode)');
 };
 
 /**

@@ -21,39 +21,39 @@ class DatabaseOptimizer {
     // User Collection - Replace 15+ indexes with 5 strategic compound indexes
     this.optimizedIndexes.set('users', [
       // Primary lookup index - most common queries
-      { 
+      {
         fields: { userType: 1, 'securityProfile.securityRiskLevel': 1 },
         options: { name: 'userType_riskLevel_idx', background: true }
       },
-      
+
       // Admin operations index
-      { 
+      {
         fields: { 'roleData.admin.username': 1, 'roleData.admin.email': 1 },
-        options: { 
-          name: 'admin_credentials_idx', 
+        options: {
+          name: 'admin_credentials_idx',
           background: true,
           sparse: true // Only index documents with admin data
         }
       },
-      
+
       // Security monitoring index
-      { 
-        fields: { 
-          'securityProfile.quarantineStatus': 1, 
+      {
+        fields: {
+          'securityProfile.quarantineStatus': 1,
           'securityProfile.overallTrustScore': -1,
-          'activityProfile.lastSeen': -1 
+          'activityProfile.lastSeen': -1
         },
         options: { name: 'security_monitoring_idx', background: true }
       },
-      
+
       // Device fingerprint lookup
-      { 
+      {
         fields: { 'anonymousProfile.deviceFingerprint': 1, 'securityProfile.primaryDeviceFingerprint': 1 },
         options: { name: 'device_lookup_idx', background: true, sparse: true }
       },
-      
+
       // Police operations (future-ready)
-      { 
+      {
         fields: { 'roleData.police.badgeNumber': 1, 'roleData.police.department': 1 },
         options: { name: 'police_operations_idx', background: true, sparse: true }
       }
@@ -62,75 +62,105 @@ class DatabaseOptimizer {
     // DeviceFingerprint Collection - Optimize for security queries
     this.optimizedIndexes.set('devicefingerprints', [
       // Primary security lookup
-      { 
+      {
         fields: { fingerprintId: 1 },
         options: { name: 'fingerprint_primary_idx', unique: true }
       },
-      
+
       // Threat detection index
-      { 
-        fields: { 
+      {
+        fields: {
           'securityProfile.riskLevel': 1,
           'threatIntelligence.threatConfidence': -1,
           'bangladeshProfile.crossBorderSuspicion': -1
         },
         options: { name: 'threat_detection_idx', background: true }
       },
-      
+
       // User association index
-      { 
+      {
         fields: { userId: 1, lastSeen: -1 },
         options: { name: 'user_association_idx', background: true, sparse: true }
       },
-      
+
       // Geographic analysis index
-      { 
-        fields: { 
+      {
+        fields: {
           'networkProfile.estimatedCountry': 1,
           'bangladeshProfile.withinBangladesh': 1,
           'lastSeen': -1
         },
         options: { name: 'geographic_analysis_idx', background: true }
+      },
+
+      // NEW: Location profile security index for anomaly detection
+      {
+        fields: {
+          'locationProfile.crossBorderActivity': 1,
+          'locationProfile.locationJumps': -1,
+          'locationProfile.suspiciousLocationPatterns': 1,
+          'securityProfile.riskLevel': 1
+        },
+        options: { name: 'location_security_idx', background: true }
+      },
+
+      // NEW: Location history index for geographic tracking
+      {
+        fields: {
+          'locationProfile.lastKnownLocation.coordinates': '2dsphere',
+          'locationProfile.lastKnownLocation.timestamp': -1
+        },
+        options: { name: 'location_history_idx', background: true, sparse: true }
+      },
+      // NEW: Analytics behavioral analysis index
+      {
+        fields: {
+          'analytics.totalReports': -1,
+          'analytics.approvedReports': -1,
+          'analytics.averageSessionTime': 1,
+          'securityProfile.trustScore': -1
+        },
+        options: { name: 'analytics_behavior_idx', background: true }
       }
     ]);
 
     // Report Collection - Optimize for map and admin queries
     this.optimizedIndexes.set('reports', [
       // Map display index (most critical for performance)
-      { 
-        fields: { 
-          status: 1, 
+      {
+        fields: {
+          status: 1,
           'location.coordinates': '2dsphere',
           type: 1,
           timestamp: -1
         },
         options: { name: 'map_display_idx', background: true }
       },
-      
+
       // Admin moderation index
-      { 
-        fields: { 
-          status: 1, 
+      {
+        fields: {
+          status: 1,
           'securityFlags.potentialSpam': 1,
           'securityFlags.crossBorderReport': 1,
           timestamp: -1
         },
         options: { name: 'admin_moderation_idx', background: true }
       },
-      
+
       // Security analysis index
-      { 
-        fields: { 
+      {
+        fields: {
           'submittedBy.deviceFingerprint': 1,
           'securityScore': -1,
           timestamp: -1
         },
         options: { name: 'security_analysis_idx', background: true }
       },
-      
+
       // Female safety index
-      { 
-        fields: { 
+      {
+        fields: {
           'femaleSafety.isFemaleSafetyReport': 1,
           'femaleSafety.culturalContext': 1,
           status: 1,
@@ -143,8 +173,8 @@ class DatabaseOptimizer {
     // AuditLog Collection - Optimize for security monitoring
     this.optimizedIndexes.set('auditlogs', [
       // Security monitoring index
-      { 
-        fields: { 
+      {
+        fields: {
           'actor.userType': 1,
           actionType: 1,
           severity: 1,
@@ -152,9 +182,9 @@ class DatabaseOptimizer {
         },
         options: { name: 'security_monitoring_audit_idx', background: true }
       },
-      
+
       // User action tracking
-      { 
+      {
         fields: { 'actor.userId': 1, timestamp: -1 },
         options: { name: 'user_audit_tracking_idx', background: true }
       }
@@ -163,42 +193,42 @@ class DatabaseOptimizer {
     // SafeZone Collection - Optimize for location and female safety queries
     this.optimizedIndexes.set('safezones', [
       // Geospatial index (CRITICAL for location queries)
-      { 
+      {
         fields: { "location": "2dsphere" },
         options: { name: 'location_geo_idx', background: true }
       },
-      
+
       // Primary filtering index (most common query pattern)
-      { 
+      {
         fields: { status: 1, zoneType: 1, category: 1 },
         options: { name: 'primary_filter_idx', background: true }
       },
-      
+
       // Location hierarchy index (district/thana queries)
-      { 
+      {
         fields: { "address.district": 1, "address.thana": 1, status: 1 },
         options: { name: 'location_hierarchy_idx', background: true }
       },
-      
+
       // Female safety index (specialized queries)
-      { 
-        fields: { 
+      {
+        fields: {
           "femaleSafety.overallFemaleSafety": -1,
           "femaleSafety.culturallyAppropriate": 1,
           status: 1
         },
         options: { name: 'female_safety_idx', background: true }
       },
-      
+
       // Safety scoring index (analytics queries)
       {
         fields: { safetyScore: -1, status: 1, zoneType: 1 },
         options: { name: 'safety_scoring_idx', background: true }
       },
-      
+
       // Female verification index (trust and verification queries)
       {
-        fields: { 
+        fields: {
           "femaleVerification.verifiedByFemale": 1,
           "femaleSafety.conservativeAreaFriendly": 1,
           status: 1
@@ -213,7 +243,7 @@ class DatabaseOptimizer {
    */
   async analyzeCurrentPerformance() {
     console.log('📊 Analyzing current database performance...');
-    
+
     const analysis = {
       collections: {},
       recommendations: [],
@@ -223,14 +253,14 @@ class DatabaseOptimizer {
     try {
       // Analyze each collection
       const collections = ['users', 'devicefingerprints', 'reports', 'auditlogs', 'safezones'];
-      
+
       for (const collectionName of collections) {
         try {
           const collection = mongoose.connection.db.collection(collectionName);
-          
+
           // Get current indexes using the correct method
           const currentIndexes = await collection.indexes();
-          
+
           // FIXED: Use MongoDB aggregation for stats instead of deprecated stats() method
           const statsResult = await collection.aggregate([
             {
@@ -239,17 +269,17 @@ class DatabaseOptimizer {
               }
             }
           ]).toArray();
-          
+
           const stats = statsResult[0] || {};
           const storageStats = stats.storageStats || {};
-          
+
           analysis.collections[collectionName] = {
             currentIndexCount: currentIndexes.length,
             documentCount: storageStats.count || 0,
             avgDocSize: storageStats.avgObjSize || 0,
             totalSize: storageStats.size || 0,
             indexSize: storageStats.totalIndexSize || 0,
-            indexSizeRatio: storageStats.size > 0 
+            indexSizeRatio: storageStats.size > 0
               ? ((storageStats.totalIndexSize || 0) / storageStats.size * 100).toFixed(2) + '%'
               : '0%'
           };
@@ -264,10 +294,10 @@ class DatabaseOptimizer {
               impact: 'High - Slowing write operations'
             });
           }
-          
+
         } catch (collectionError) {
           console.warn(`⚠️ Could not analyze collection ${collectionName}:`, collectionError.message);
-          
+
           // Fallback analysis without detailed stats
           analysis.collections[collectionName] = {
             currentIndexCount: 'unknown',
@@ -290,10 +320,10 @@ class DatabaseOptimizer {
       };
 
       return analysis;
-      
+
     } catch (error) {
       console.error('❌ Error analyzing database performance:', error);
-      
+
       // Return partial analysis on error
       return {
         collections: analysis.collections,
@@ -313,11 +343,11 @@ class DatabaseOptimizer {
    */
   async dropRedundantIndexes() {
     console.log('🗑️ Dropping redundant indexes...');
-    
+
     const indexesToDrop = {
       users: [
         'roleData.admin.username_1',
-        'roleData.admin.email_1', 
+        'roleData.admin.email_1',
         'roleData.police.badgeNumber_1',
         'roleData.police.phoneNumber_1',
         'roleData.researcher.email_1',
@@ -337,7 +367,7 @@ class DatabaseOptimizer {
     for (const [collectionName, indexes] of Object.entries(indexesToDrop)) {
       try {
         const collection = mongoose.connection.db.collection(collectionName);
-        
+
         for (const indexName of indexes) {
           try {
             await collection.dropIndex(indexName);
@@ -359,11 +389,11 @@ class DatabaseOptimizer {
    */
   async createOptimizedIndexes() {
     console.log('🔧 Creating optimized indexes...');
-    
+
     for (const [collectionName, indexes] of this.optimizedIndexes.entries()) {
       try {
         const collection = mongoose.connection.db.collection(collectionName);
-        
+
         for (const indexConfig of indexes) {
           try {
             await collection.createIndex(indexConfig.fields, indexConfig.options);
@@ -392,10 +422,10 @@ class DatabaseOptimizer {
     }
 
     this.isOptimizing = true;
-    
+
     try {
       console.log('🚀 Starting database optimization process...');
-      
+
       // Step 1: Analyze current performance (with error handling)
       let analysis;
       try {
@@ -403,23 +433,23 @@ class DatabaseOptimizer {
         console.log('📊 Performance Analysis:', JSON.stringify(analysis, null, 2));
       } catch (error) {
         console.warn('⚠️ Performance analysis failed, continuing with optimization:', error.message);
-        analysis = { 
-          collections: {}, 
-          recommendations: [], 
+        analysis = {
+          collections: {},
+          recommendations: [],
           estimatedImprovements: {},
-          error: error.message 
+          error: error.message
         };
       }
-      
+
       // Step 2: Define optimized indexes
       this.defineOptimizedIndexes();
-      
+
       // Step 3: Drop redundant indexes
       await this.dropRedundantIndexes();
-      
+
       // Step 4: Create optimized indexes
       await this.createOptimizedIndexes();
-      
+
       // Step 5: Analyze new performance (with error handling)
       let newAnalysis;
       try {
@@ -427,22 +457,22 @@ class DatabaseOptimizer {
         console.log('📈 Post-optimization Analysis:', JSON.stringify(newAnalysis, null, 2));
       } catch (error) {
         console.warn('⚠️ Post-optimization analysis failed:', error.message);
-        newAnalysis = { 
-          collections: {}, 
-          recommendations: [], 
+        newAnalysis = {
+          collections: {},
+          recommendations: [],
           estimatedImprovements: {},
-          error: error.message 
+          error: error.message
         };
       }
-      
+
       console.log('✅ Database optimization completed successfully!');
-      
+
       return {
         before: analysis,
         after: newAnalysis,
         improvements: this.calculateImprovements(analysis, newAnalysis)
       };
-      
+
     } catch (error) {
       console.error('❌ Database optimization failed:', error);
       throw error;
@@ -456,17 +486,17 @@ class DatabaseOptimizer {
    */
   calculateImprovements(before, after) {
     const improvements = {};
-    
+
     // Only calculate if both analyses succeeded
     if (!before.error && !after.error) {
       for (const collection of Object.keys(before.collections)) {
         const beforeStats = before.collections[collection];
         const afterStats = after.collections[collection];
-        
-        if (beforeStats && afterStats && 
-            typeof beforeStats.currentIndexCount === 'number' &&
-            typeof afterStats.currentIndexCount === 'number') {
-          
+
+        if (beforeStats && afterStats &&
+          typeof beforeStats.currentIndexCount === 'number' &&
+          typeof afterStats.currentIndexCount === 'number') {
+
           improvements[collection] = {
             indexReduction: beforeStats.currentIndexCount - afterStats.currentIndexCount,
             indexSizeReduction: parseFloat(beforeStats.indexSizeRatio) - parseFloat(afterStats.indexSizeRatio),
@@ -475,7 +505,7 @@ class DatabaseOptimizer {
         }
       }
     }
-    
+
     // Provide general improvements even if specific calculations failed
     if (Object.keys(improvements).length === 0) {
       improvements.general = {
@@ -485,7 +515,7 @@ class DatabaseOptimizer {
         note: 'Specific metrics unavailable due to collection analysis limitations'
       };
     }
-    
+
     return improvements;
   }
 
@@ -493,8 +523,8 @@ class DatabaseOptimizer {
    * FIXED: Monitor query performance
    */
   async monitorQueryPerformance(duration = 60000) {
-    console.log(`📊 Monitoring query performance for ${duration/1000} seconds...`);
-    
+    console.log(`📊 Monitoring query performance for ${duration / 1000} seconds...`);
+
     try {
       // Enable profiling with error handling
       try {
@@ -504,24 +534,24 @@ class DatabaseOptimizer {
         console.warn('⚠️ Could not enable profiling:', error.message);
         return;
       }
-      
+
       setTimeout(async () => {
         try {
           // Get profiling data
           const profileCollection = mongoose.connection.db.collection('system.profile');
           const profile = await profileCollection.find({}).toArray();
-          
+
           // Analyze slow queries
-          const recentQueries = profile.filter(op => 
+          const recentQueries = profile.filter(op =>
             op.ts && op.ts > new Date(Date.now() - duration)
           );
-          
+
           const slowQueries = recentQueries.filter(op => op.millis && op.millis > 100);
-          
+
           console.log(`📈 Query Performance Report:`, {
             totalQueries: recentQueries.length,
             slowQueries: slowQueries.length,
-            averageExecutionTime: recentQueries.length > 0 
+            averageExecutionTime: recentQueries.length > 0
               ? recentQueries.reduce((acc, op) => acc + (op.millis || 0), 0) / recentQueries.length
               : 0,
             slowestQueries: slowQueries
@@ -533,7 +563,7 @@ class DatabaseOptimizer {
                 collection: op.ns
               }))
           });
-          
+
           // Disable profiling
           try {
             await mongoose.connection.db.admin().command({ profile: 0 });
@@ -541,12 +571,12 @@ class DatabaseOptimizer {
           } catch (error) {
             console.warn('⚠️ Could not disable profiling:', error.message);
           }
-          
+
         } catch (error) {
           console.error('❌ Error analyzing profiling data:', error);
         }
       }, duration);
-      
+
     } catch (error) {
       console.error('❌ Performance monitoring failed:', error);
     }
@@ -559,13 +589,13 @@ class DatabaseOptimizer {
     try {
       const collections = ['users', 'reports', 'devicefingerprints', 'auditlogs', 'safezones'];
       const health = {};
-      
+
       for (const collectionName of collections) {
         try {
           const collection = mongoose.connection.db.collection(collectionName);
           const count = await collection.countDocuments({});
           const indexes = await collection.indexes();
-          
+
           health[collectionName] = {
             status: 'healthy',
             documentCount: count,
@@ -578,7 +608,7 @@ class DatabaseOptimizer {
           };
         }
       }
-      
+
       return health;
     } catch (error) {
       return { status: 'error', error: error.message };
@@ -592,17 +622,17 @@ const databaseOptimizer = new DatabaseOptimizer();
 module.exports = {
   DatabaseOptimizer,
   databaseOptimizer,
-  
+
   // Quick optimization function for immediate use
   async optimizeDatabase() {
     return await databaseOptimizer.optimizeDatabase();
   },
-  
+
   // Performance monitoring function
   async monitorPerformance(duration = 60000) {
     return await databaseOptimizer.monitorQueryPerformance(duration);
   },
-  
+
   // Health check function
   async healthCheck() {
     return await databaseOptimizer.healthCheck();

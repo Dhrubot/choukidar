@@ -25,7 +25,9 @@ const auditLogSchema = new mongoose.Schema({
       'invite_token_generate', 'invite_token_use',
       'system_config_update', 'data_export', 'data_import',
       'security_alert_review', 'security_policy_change',
-      'password_reset_request', 'password_reset_complete', 'email_verification_request', 'email_verification_complete'
+      'password_reset_request', 'password_reset_complete', 'email_verification_request', 'email_verification_complete',
+      'view_performance_report', 'view_performance_metrics', 'view_performance_database', 'view_performance_cache', 'reset_performance_metrics', 'export_performance_metrics',
+      'view_security_alerts', 'view_security_policy', 'view_security_metrics', 'view_security_database', 'view_security_cache', 'reset_security_metrics', 'export_security_metrics',
     ]
   },
   
