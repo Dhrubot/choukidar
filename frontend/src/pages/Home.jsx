@@ -12,11 +12,79 @@ function Home() {
     activeUsers: 500,
     safeZones: 0
   })
+  
+  const [recentReports, setRecentReports] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  // Helper function to format time ago
+  const formatTimeAgo = (timestamp) => {
+    const now = new Date()
+    const reportTime = new Date(timestamp)
+    const diffInMs = now - reportTime
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60))
+    const diffInDays = Math.floor(diffInHours / 24)
+    
+    if (diffInHours < 1) return 'Less than 1 hour ago'
+    if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`
+    if (diffInDays < 7) return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`
+    return reportTime.toLocaleDateString()
+  }
+
+  // Helper function to get status badge
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'approved':
+      case 'verified':
+        return 'badge-success'
+      case 'pending':
+        return 'badge-pending'
+      case 'under_review':
+        return 'badge-warning'
+      case 'flagged':
+        return 'badge-error'
+      default:
+        return 'badge-info'
+    }
+  }
+
+  // Helper function to get status text
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'approved':
+      case 'verified':
+        return 'Verified'
+      case 'pending':
+        return 'Pending'
+      case 'under_review':
+        return 'Under Review'
+      case 'flagged':
+        return 'Flagged'
+      default:
+        return status
+    }
+  }
+
+  // Helper function to get incident type display name
+  const getIncidentTypeDisplay = (type) => {
+    const typeMap = {
+      'chadabaji': 'Chadabaji (Extortion)',
+      'harassment': 'Harassment',
+      'theft': 'Theft',
+      'assault': 'Assault',
+      'vandalism': 'Vandalism',
+      'drug_activity': 'Drug Activity',
+      'gang_activity': 'Gang Activity',
+      'other': 'Other Incident'
+    }
+    return typeMap[type] || type
+  }
 
   useEffect(() => {
-    // Fetch reports - backend already filters for approved/verified reports for public users
-    apiService.getReports()
-      .then(data => {
+    const fetchData = async () => {
+      try {
+        // Fetch reports - backend already filters for approved/verified reports for public users
+        const data = await apiService.getReports()
+        
         if (data.success) {
           // Reports are already filtered to approved/verified by backend
           const reports = data.data || []
@@ -24,14 +92,27 @@ function Home() {
           const activeUsers = new Set(reports.map(r => r.userId)).size
           
           setStats({
-            totalReports: totalApprovedReports, // These are all approved reports
-            approvedReports: totalApprovedReports, // Same as total since backend filters
+            totalReports: totalApprovedReports,
+            approvedReports: totalApprovedReports,
             activeUsers,
-            safeZones: 0 // Could fetch from safe zones API if needed
+            safeZones: 0
           })
+
+          // Get the 3 most recent reports for activity section
+          const sortedReports = reports
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, 3)
+          
+          setRecentReports(sortedReports)
         }
-      })
-      .catch(err => logError('Error fetching stats', 'HomePage', err))
+      } catch (err) {
+        logError('Error fetching data', 'HomePage', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
   }, [])
 
   return (
@@ -154,58 +235,68 @@ function Home() {
               Recent Activity
             </h2>
             <p className="text-lg text-neutral-600">
-              Latest reports and community updates
+              Latest verified reports from the community
             </p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Activity Card 1 */}
-            <div className="card group hover:shadow-medium transition-all duration-300">
-              <div className="card-body">
-                <div className="flex items-center mb-4">
-                  <MapPin className="w-5 h-5 text-safe-primary mr-2" />
-                  <span className="text-sm font-medium text-neutral-600">Dhanmondi Area</span>
-                  <span className="badge-success ml-auto">Verified</span>
+            {loading ? (
+              // Loading skeleton
+              Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="card animate-pulse">
+                  <div className="card-body">
+                    <div className="flex items-center mb-4">
+                      <div className="w-5 h-5 bg-gray-200 rounded mr-2"></div>
+                      <div className="w-24 h-4 bg-gray-200 rounded"></div>
+                      <div className="w-16 h-6 bg-gray-200 rounded ml-auto"></div>
+                    </div>
+                    <div className="w-32 h-6 bg-gray-200 rounded mb-3"></div>
+                    <div className="space-y-2 mb-4">
+                      <div className="w-full h-4 bg-gray-200 rounded"></div>
+                      <div className="w-3/4 h-4 bg-gray-200 rounded"></div>
+                    </div>
+                    <div className="w-20 h-3 bg-gray-200 rounded"></div>
+                  </div>
                 </div>
-                <h4 className="font-bold mb-3 text-neutral-800">Chadabaji Incident Reported</h4>
-                <p className="text-sm text-neutral-600 leading-relaxed mb-4">
-                  Community member reported extortion attempt near shopping area. Local authorities have been notified.
-                </p>
-                <div className="text-xs text-neutral-400">2 hours ago</div>
-              </div>
-            </div>
-            
-            {/* Activity Card 2 */}
-            <div className="card group hover:shadow-medium transition-all duration-300">
-              <div className="card-body">
-                <div className="flex items-center mb-4">
-                  <MapPin className="w-5 h-5 text-safe-primary mr-2" />
-                  <span className="text-sm font-medium text-neutral-600">Gulshan Circle</span>
-                  <span className="badge-info ml-auto">Positive Change</span>
+              ))
+            ) : recentReports.length > 0 ? (
+              recentReports.map((report, index) => (
+                <div key={report._id || index} className="card group hover:shadow-medium transition-all duration-300">
+                  <div className="card-body">
+                    <div className="flex items-center mb-4">
+                      <MapPin className="w-5 h-5 text-safe-primary mr-2" />
+                      <span className="text-sm font-medium text-neutral-600">
+                        {report.location?.address || 
+                         report.location?.district || 
+                         `${report.location?.coordinates?.[1]?.toFixed(4)}, ${report.location?.coordinates?.[0]?.toFixed(4)}` ||
+                         'Location not specified'}
+                      </span>
+                      <span className={`${getStatusBadge(report.status)} ml-auto`}>
+                        {getStatusText(report.status)}
+                      </span>
+                    </div>
+                    <h4 className="font-bold mb-3 text-neutral-800">
+                      {getIncidentTypeDisplay(report.type)}
+                    </h4>
+                    <p className="text-sm text-neutral-600 leading-relaxed mb-4">
+                      {report.description?.length > 100 
+                        ? `${report.description.substring(0, 100)}...` 
+                        : report.description || 'No description provided'}
+                    </p>
+                    <div className="text-xs text-neutral-400">
+                      {formatTimeAgo(report.timestamp)}
+                    </div>
+                  </div>
                 </div>
-                <h4 className="font-bold mb-3 text-neutral-800">Safety Improvement</h4>
-                <p className="text-sm text-neutral-600 leading-relaxed mb-4">
-                  Increased police presence after community reports. Crime rate decreased by 40% in this area.
-                </p>
-                <div className="text-xs text-neutral-400">1 day ago</div>
+              ))
+            ) : (
+              // No reports state
+              <div className="col-span-full text-center py-12">
+                <AlertTriangle className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-neutral-600 mb-2">No Recent Activity</h3>
+                <p className="text-neutral-500">Be the first to report an incident in your area.</p>
               </div>
-            </div>
-            
-            {/* Activity Card 3 */}
-            <div className="card group hover:shadow-medium transition-all duration-300">
-              <div className="card-body">
-                <div className="flex items-center mb-4">
-                  <MapPin className="w-5 h-5 text-safe-primary mr-2" />
-                  <span className="text-sm font-medium text-neutral-600">Uttara Sector 7</span>
-                  <span className="badge-pending ml-auto">Under Review</span>
-                </div>
-                <h4 className="font-bold mb-3 text-neutral-800">Teen Gang Activity</h4>
-                <p className="text-sm text-neutral-600 leading-relaxed mb-4">
-                  Multiple reports of harassment near school area. Investigation team deployed for verification.
-                </p>
-                <div className="text-xs text-neutral-400">3 days ago</div>
-              </div>
-            </div>
+            )}
           </div>
           
           <div className="text-center mt-12">
