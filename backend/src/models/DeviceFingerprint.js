@@ -461,52 +461,60 @@ deviceFingerprintSchema.pre('save', function (next) {
     anomaly += 8;
   }
 
-  // Location consistency check (15% weight)
-  if (this.locationProfile.crossBorderActivity) anomaly += 15;
-  if (this.locationProfile.locationJumps > 3) anomaly += 10; // Frequent location changes
-  if (this.locationProfile.gpsAccuracy > 1000) anomaly += 5; // Poor GPS accuracy
-
-  // Security flags (10% weight)
-  if (this.securityProfile.spamSuspected) anomaly += 8;
-  if (this.securityProfile.spoofingSuspected) anomaly += 12;
-  if (this.securityProfile.flaggedReports > 0) {
-    anomaly += Math.min(10, this.securityProfile.flaggedReports * 2);
-  }
-
-  // Historical behavior patterns
-  if (this.analytics.totalReports > 50 && this.analytics.approvedReports === 0) {
-    anomaly += 15; // Many reports but none approved - suspicious
-  }
-
-  if (this.analytics.averageSessionTime < 60) {
-    anomaly += 5; // Very short average sessions
-  }
-
-  // Device consistency checks
-  const deviceChanges = [
-    this.deviceSignature.userAgent !== this.previousSignature?.userAgent,
-    this.deviceSignature.screenResolution !== this.previousSignature?.screenResolution,
-    this.deviceSignature.timezone !== this.previousSignature?.timezone
-  ].filter(Boolean).length;
-
-  if (deviceChanges >= 2) anomaly += 8; // Multiple device characteristics changed
-
-  // Cap the anomaly score and apply smoothing
-  this.deviceAnomalyScore = Math.min(100, Math.max(0, anomaly));
-
-  // Apply temporal smoothing to prevent sudden spikes
-  if (this.previousAnomalyScore !== undefined) {
-    const maxChange = 15; // Maximum change per update
-    const change = this.deviceAnomalyScore - this.previousAnomalyScore;
-    if (Math.abs(change) > maxChange) {
-      this.deviceAnomalyScore = this.previousAnomalyScore + (change > 0 ? maxChange : -maxChange);
-    }
-  }
-
-  // Store previous score for next calculation
-  this.previousAnomalyScore = this.deviceAnomalyScore;
-
-  next();
+   // Location consistency check (15% weight)
+   if (this.locationProfile.crossBorderActivity) anomaly += 15;
+   const locationJumps = this.locationProfile.locationJumps || 0;
+   const gpsAccuracy = this.locationProfile.gpsAccuracy || 100; // Default accuracy
+   if (locationJumps > 3) anomaly += 10; // Frequent location changes
+   if (gpsAccuracy > 1000) anomaly += 5; // Poor GPS accuracy
+ 
+   // Security flags (10% weight)
+   if (this.securityProfile.spamSuspected) anomaly += 8;
+   if (this.securityProfile.spoofingSuspected) anomaly += 12;
+   const flaggedReports = this.securityProfile.flaggedReports || 0;
+   if (flaggedReports > 0) {
+     anomaly += Math.min(10, flaggedReports * 2);
+   }
+ 
+   // Historical behavior patterns
+   const totalReports = this.analytics.totalReports || 0;
+   const approvedReports = this.analytics.approvedReports || 0;
+   const averageSessionTime = this.analytics.averageSessionTime || 300; // Default 5 minutes
+   
+   if (totalReports > 50 && approvedReports === 0) {
+     anomaly += 15; // Many reports but none approved - suspicious
+   }
+ 
+   if (averageSessionTime < 60) {
+     anomaly += 5; // Very short average sessions
+   }
+ 
+   // Device consistency checks - safely handle previousSignature
+   const previousSignature = this.previousSignature || {};
+   const deviceChanges = [
+     this.deviceSignature.userAgent !== previousSignature.userAgent,
+     this.deviceSignature.screenResolution !== previousSignature.screenResolution,
+     this.deviceSignature.timezone !== previousSignature.timezone
+   ].filter(Boolean).length;
+ 
+   if (deviceChanges >= 2) anomaly += 8; // Multiple device characteristics changed
+ 
+   // Cap the anomaly score and apply smoothing
+   this.deviceAnomalyScore = Math.min(100, Math.max(0, anomaly));
+ 
+   // Apply temporal smoothing to prevent sudden spikes
+   if (this.previousAnomalyScore !== undefined) {
+     const maxChange = 15; // Maximum change per update
+     const change = this.deviceAnomalyScore - this.previousAnomalyScore;
+     if (Math.abs(change) > maxChange) {
+       this.deviceAnomalyScore = this.previousAnomalyScore + (change > 0 ? maxChange : -maxChange);
+     }
+   }
+ 
+   // Store previous score for next calculation
+   this.previousAnomalyScore = this.deviceAnomalyScore;
+ 
+   next();
 });
 
 // Post-save middleware for logging
