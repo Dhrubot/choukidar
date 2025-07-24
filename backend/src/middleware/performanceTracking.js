@@ -186,9 +186,14 @@ const addPerformanceHeaders = (req, res, next) => {
   if (process.env.NODE_ENV === 'development' || process.env.SHOW_PERFORMANCE_HEADERS === 'true') {
     const report = performanceMonitor.generateReport();
     
-    res.setHeader('X-DB-Queries', report.database.queryCount);
-    res.setHeader('X-Cache-Hit-Rate', report.cache.hitRate.toFixed(2) + '%');
-    res.setHeader('X-Avg-Response-Time', report.api.avgResponseTime.toFixed(2) + 'ms');
+    // Add null checks to prevent toFixed() errors
+    const dbQueries = report.database?.queryCount || 0;
+    const cacheHitRate = typeof report.cache?.hitRateNumeric === 'number' ? report.cache.hitRateNumeric : 0;
+    const avgResponseTime = typeof report.api?.avgResponseTime === 'number' ? report.api.avgResponseTime : 0;
+    
+    res.setHeader('X-DB-Queries', dbQueries);
+    res.setHeader('X-Cache-Hit-Rate', cacheHitRate.toFixed(2) + '%');
+    res.setHeader('X-Avg-Response-Time', avgResponseTime.toFixed(2) + 'ms');
   }
   
   next();

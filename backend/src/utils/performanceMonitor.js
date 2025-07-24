@@ -162,6 +162,15 @@ class PerformanceMonitor {
     const uptime = Date.now() - this.startTime;
     const uptimeHours = uptime / (1000 * 60 * 60);
 
+    // Calculate cache hit rate safely
+    const totalCacheOps = this.metrics.cache.hits + this.metrics.cache.misses;
+    const cacheHitRate = totalCacheOps > 0 ? (this.metrics.cache.hits / totalCacheOps) * 100 : 0;
+    
+    // Calculate optimization rate safely
+    const optimizationRate = this.metrics.database.queryCount > 0 
+      ? (this.metrics.database.optimizedQueries / this.metrics.database.queryCount) * 100 
+      : 0;
+
     return {
       timestamp: new Date().toISOString(),
       uptime: {
@@ -170,24 +179,23 @@ class PerformanceMonitor {
       },
       database: {
         ...this.metrics.database,
-        queriesPerHour: (this.metrics.database.queryCount / uptimeHours).toFixed(2),
-        optimizationRate: (
-          (this.metrics.database.optimizedQueries / this.metrics.database.queryCount) * 100
-        ).toFixed(2) + '%',
+        queriesPerHour: uptimeHours > 0 ? (this.metrics.database.queryCount / uptimeHours).toFixed(2) : '0',
+        optimizationRate: optimizationRate.toFixed(2) + '%',
         topSlowQueries: this.metrics.database.slowQueries
           .sort((a, b) => b.duration - a.duration)
           .slice(0, 10)
       },
       cache: {
         ...this.metrics.cache,
-        hitRate: this.metrics.cache.hitRate.toFixed(2) + '%',
-        efficiency: this.metrics.cache.hitRate > 70 ? 'Excellent' : 
-                   this.metrics.cache.hitRate > 50 ? 'Good' : 'Needs Improvement'
+        hitRate: cacheHitRate.toFixed(2) + '%',
+        hitRateNumeric: cacheHitRate, // Keep numeric value for headers
+        efficiency: cacheHitRate > 70 ? 'Excellent' : 
+                   cacheHitRate > 50 ? 'Good' : 'Needs Improvement'
       },
       api: {
         ...this.metrics.api,
-        requestsPerHour: (this.metrics.api.totalRequests / uptimeHours).toFixed(2),
-        errorRate: this.metrics.api.errorRate.toFixed(2) + '%',
+        requestsPerHour: uptimeHours > 0 ? (this.metrics.api.totalRequests / uptimeHours).toFixed(2) : '0',
+        errorRate: (this.metrics.api.errorRate || 0).toFixed(2) + '%',
         topRoutes: Array.from(this.metrics.api.routeMetrics.entries())
           .sort(([,a], [,b]) => b.count - a.count)
           .slice(0, 10)
@@ -195,7 +203,7 @@ class PerformanceMonitor {
       },
       websocket: {
         ...this.metrics.websocket,
-        avgMessagesPerSecond: (this.metrics.websocket.messagesPerSecond / uptimeHours).toFixed(2)
+        avgMessagesPerSecond: uptimeHours > 0 ? (this.metrics.websocket.messagesPerSecond / uptimeHours).toFixed(2) : '0'
       },
       recommendations: this.generateRecommendations()
     };
