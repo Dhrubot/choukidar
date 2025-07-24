@@ -5,6 +5,8 @@ const SafeZone = require('../models/SafeZone');
 const AuditLog = require('../models/AuditLog'); // Import AuditLog for admin action logging
 const { requireAdmin, requirePermission } = require('../middleware/roleBasedAccess'); // Corrected import
 const { userTypeDetection } = require('../middleware/userTypeDetection'); // Import userTypeDetection
+const { cacheLayer, cacheMiddleware } = require('../middleware/cacheLayer'); // Import Redis caching
+const crypto = require('crypto'); // For hashing cache keys
 
 // Apply user type detection to all routes in this router
 router.use(userTypeDetection);
@@ -34,7 +36,24 @@ const logAdminAction = async (req, actionType, details = {}, severity = 'medium'
 };
 
 // GET public safe zones (for map display)
-router.get('/', async (req, res) => {
+router.get('/', 
+  cacheMiddleware(600, (req) => {
+    // Custom cache key for map queries - 10 minute cache
+    const queryHash = crypto.createHash('md5')
+      .update(JSON.stringify({
+        lat: req.query.lat,
+        lng: req.query.lng,
+        radius: req.query.radius || 5000,
+        minSafety: req.query.minSafety || 6,
+        zoneType: req.query.zoneType,
+        category: req.query.category,
+        district: req.query.district,
+        limit: req.query.limit || 100
+      }))
+      .digest('hex');
+    return `safezones:map:${queryHash}`;
+  }),
+  async (req, res) => {
   try {
     const {
       lat,
@@ -186,7 +205,12 @@ router.get('/', async (req, res) => {
 });
 
 // GET specific safe zone by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', 
+  cacheMiddleware(1800, (req) => {
+    // Cache individual safe zones for 30 minutes
+    return `safezone:detail:${req.params.id}`;
+  }),
+  async (req, res) => {
   try {
     const safeZone = await SafeZone.findById(req.params.id)
       .select('-adminNotes'); // Exclude admin notes from public API
@@ -219,7 +243,21 @@ router.get('/:id', async (req, res) => {
 });
 
 // GET safe zones by district/thana
-router.get('/location/:district', async (req, res) => {
+router.get('/location/:district', 
+  cacheMiddleware(900, (req) => {
+    // Cache location-based queries for 15 minutes
+    const queryHash = crypto.createHash('md5')
+      .update(JSON.stringify({
+        district: req.params.district,
+        thana: req.query.thana,
+        zoneType: req.query.zoneType,
+        minSafety: req.query.minSafety || 6,
+        limit: req.query.limit || 50
+      }))
+      .digest('hex');
+    return `safezones:location:${queryHash}`;
+  }),
+  async (req, res) => {
   try {
     const { district } = req.params;
     const { thana, zoneType, minSafety = 6, limit = 50 } = req.query;
@@ -283,7 +321,12 @@ router.get('/location/:district', async (req, res) => {
 });
 
 // GET safe zone analytics (public statistics)
-router.get('/analytics/public', async (req, res) => {
+router.get('/analytics/public', 
+  cacheMiddleware(1800, () => {
+    // Cache analytics for 30 minutes - same for all users
+    return 'safezones:analytics:public';
+  }),
+  async (req, res) => {
   try {
     const stats = await SafeZone.aggregate([
       { $match: { status: 'active' } },
@@ -442,6 +485,10 @@ router.post('/admin/create',
         { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
     );
 
+    // Invalidate relevant caches after creating a new safe zone
+    await cacheLayer.deletePattern('safezones:*');
+    await cacheLayer.deletePattern('admin:*');
+
     console.log(`✅ Admin created safe zone: ${safeZone.name} (${safeZone.zoneType})`);
 
     res.status(201).json({
@@ -491,6 +538,10 @@ router.put('/admin/:id',
         { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
     );
 
+    // Invalidate relevant caches after updating a safe zone
+    await cacheLayer.deletePattern('safezones:*');
+    await cacheLayer.deletePattern('admin:*');
+
     console.log(`✅ Admin updated safe zone: ${safeZone.name}`);
 
     res.json({
@@ -532,6 +583,10 @@ router.delete('/admin/:id',
         'high',
         { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
     );
+
+    // Invalidate relevant caches after deleting a safe zone
+    await cacheLayer.deletePattern('safezones:*');
+    await cacheLayer.deletePattern('admin:*');
 
     console.log(`✅ Admin deleted safe zone: ${safeZone.name}`);
 
@@ -580,6 +635,10 @@ router.put('/admin/bulk/status',
         { safeZoneIds, status, count: result.modifiedCount },
         'high'
     );
+
+    // Invalidate relevant caches after bulk updating safe zones
+    await cacheLayer.deletePattern('safezones:*');
+    await cacheLayer.deletePattern('admin:*');
 
     console.log(`✅ Admin bulk updated ${result.modifiedCount} safe zones to status: ${status}`);
 
@@ -792,6 +851,10 @@ router.post('/admin/import',
         });
       }
     }
+
+    // Invalidate relevant caches after importing safe zones
+    await cacheLayer.deletePattern('safezones:*');
+    await cacheLayer.deletePattern('admin:*');
 
     console.log(`✅ Import completed: ${results.created} created, ${results.updated} updated, ${results.errors.length} errors`);
 

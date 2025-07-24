@@ -9,6 +9,8 @@ const Report = require('../models/Report');
 const AuditLog = require('../models/AuditLog'); // For logging admin actions
 const { userTypeDetection } = require('../middleware/userTypeDetection');
 const { requireAdmin, requirePermission } = require('../middleware/roleBasedAccess'); // Corrected import
+const { cacheLayer, cacheMiddleware } = require('../middleware/cacheLayer'); // Import Redis caching
+const crypto = require('crypto'); // For cache key hashing
 
 // Apply security middleware to all admin routes
 router.use(userTypeDetection);
@@ -44,9 +46,14 @@ const logAdminAction = async (req, actionType, details = {}, severity = 'low') =
   }
 };
 
-
 // GET /api/admin/dashboard - Admin dashboard stats
-router.get('/dashboard', requirePermission('view_admin_analytics'), async (req, res) => {
+router.get('/dashboard', 
+  requirePermission('view_admin_analytics'),
+  cacheMiddleware(300, () => {
+    // Cache dashboard for 5 minutes - same for all admins
+    return 'admin:dashboard:stats';
+  }),
+  async (req, res) => {
   try {
     const basicStats = {
       total: await Report.countDocuments(),
@@ -99,7 +106,13 @@ router.get('/dashboard', requirePermission('view_admin_analytics'), async (req, 
 });
 
 // GET /api/admin/reports/flagged - Get reports with security flags
-router.get('/reports/flagged', requirePermission('moderate_content'), async (req, res) => {
+router.get('/reports/flagged', 
+  requirePermission('moderate_content'),
+  cacheMiddleware(180, () => {
+    // Cache flagged reports for 3 minutes
+    return 'admin:reports:flagged';
+  }),
+  async (req, res) => {
   try {
     const flaggedReports = await Report.find({
       $or: [
@@ -131,7 +144,21 @@ router.get('/reports/flagged', requirePermission('moderate_content'), async (req
 });
 
 // GET /api/admin/reports - Get reports for moderation queue (alias for /reports/all)
-router.get('/reports', requirePermission('view_all_reports'), async (req, res) => {
+router.get('/reports', 
+  requirePermission('view_all_reports'),
+  cacheMiddleware(180, (req) => {
+    // Cache moderation queue for 3 minutes with pagination
+    const queryHash = crypto.createHash('md5')
+      .update(JSON.stringify({
+        page: req.query.page || 1,
+        limit: req.query.limit || 10,
+        status: req.query.status,
+        severity: req.query.severity
+      }))
+      .digest('hex');
+    return `admin:reports:moderation:${queryHash}`;
+  }),
+  async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -186,7 +213,23 @@ router.get('/reports', requirePermission('view_all_reports'), async (req, res) =
 });
 
 // GET /api/admin/reports/all - Get all reports for admin dashboard
-router.get('/reports/all', requirePermission('view_all_reports'), async (req, res) => {
+router.get('/reports/all', 
+  requirePermission('view_all_reports'),
+  cacheMiddleware(180, (req) => {
+    // Cache admin reports for 3 minutes with pagination
+    const queryHash = crypto.createHash('md5')
+      .update(JSON.stringify({
+        page: req.query.page || 1,
+        limit: req.query.limit || 50,
+        status: req.query.status,
+        severity: req.query.severity,
+        sortBy: req.query.sortBy || 'timestamp',
+        sortOrder: req.query.sortOrder || 'desc'
+      }))
+      .digest('hex');
+    return `admin:reports:all:${queryHash}`;
+  }),
+  async (req, res) => {
   try {
     const { page = 1, limit = 50, status, severity, sortBy = 'timestamp', sortOrder = 'desc' } = req.query;
     
@@ -277,7 +320,13 @@ router.get('/verify', requirePermission('admin_access'), async (req, res) => {
 });
 
 // GET /api/admin/analytics/security - Security analytics for admin monitoring
-router.get('/analytics/security', requirePermission('view_security_analytics'), async (req, res) => {
+router.get('/analytics/security', 
+  requirePermission('view_security_analytics'),
+  cacheMiddleware(600, () => {
+    // Cache security analytics for 10 minutes - same for all admins
+    return 'admin:analytics:security';
+  }),
+  async (req, res) => {
   try {
     const analytics = await Report.aggregate([
       {
@@ -325,171 +374,3 @@ router.get('/analytics/security', requirePermission('view_security_analytics'), 
 });
 
 module.exports = router;
-
-// === backend/src/routes/admin.js ===
-// Enhanced Admin Routes with Role-Specific Middleware
-
-// const express = require('express');
-// const router = express.Router();
-// const User = require('../models/User');
-// const Report = require('../models/Report');
-// const AuditLog = require('../models/AuditLog');
-// const RoleMiddleware = require('../middleware/roleSpecificMiddleware');
-// const { userTypeDetection } = require('../middleware/userTypeDetection');
-// const { adminOperationLimiter } = require('../middleware/rateLimiter');
-
-// router.use(userTypeDetection);
-// router.use(adminOperationLimiter);
-
-// // Admin dashboard with enhanced statistics
-// router.get('/dashboard', RoleMiddleware.apply(RoleMiddleware.adminAnalytics), async (req, res) => {
-//   try {
-//     const [userStats, reportStats, securityStats, auditStats] = await Promise.all([
-//       // User statistics
-//       User.aggregate([
-//         {
-//           $group: {
-//             _id: '$userType',
-//             count: { $sum: 1 },
-//             avgTrustScore: { $avg: '$securityProfile.overallTrustScore' }
-//           }
-//         }
-//       ]),
-      
-//       // Report statistics
-//       Report.aggregate([
-//         {
-//           $group: {
-//             _id: '$status',
-//             count: { $sum: 1 }
-//           }
-//         }
-//       ]),
-      
-//       // Security statistics
-//       User.aggregate([
-//         {
-//           $group: {
-//             _id: '$securityProfile.securityRiskLevel',
-//             count: { $sum: 1 }
-//           }
-//         }
-//       ]),
-      
-//       // Recent audit activity
-//       AuditLog.countDocuments({
-//         timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-//       })
-//     ]);
-
-//     res.json({
-//       success: true,
-//       dashboard: {
-//         users: userStats,
-//         reports: reportStats,
-//         security: securityStats,
-//         auditActivity: auditStats,
-//         generatedAt: new Date().toISOString()
-//       }
-//     });
-
-//   } catch (error) {
-//     console.error('❌ Dashboard error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Failed to load dashboard'
-//     });
-//   }
-// });
-
-// // User management routes with enhanced security
-// router.get('/users', RoleMiddleware.apply(RoleMiddleware.adminUserManagement), async (req, res) => {
-//   try {
-//     const {
-//       userType = 'all',
-//       riskLevel = 'all',
-//       quarantined = 'all',
-//       emailVerified = 'all',
-//       page = 1,
-//       limit = 50
-//     } = req.query;
-
-//     const query = {};
-    
-//     if (userType !== 'all') query.userType = userType;
-//     if (riskLevel !== 'all') query['securityProfile.securityRiskLevel'] = riskLevel;
-//     if (quarantined !== 'all') query['securityProfile.quarantineStatus'] = quarantined === 'true';
-//     if (emailVerified !== 'all') query['roleData.admin.emailVerified'] = emailVerified === 'true';
-
-//     const users = await User.find(query)
-//       .select('-roleData.admin.passwordHash -roleData.admin.passwordResetToken')
-//       .sort({ 'activityProfile.lastSeen': -1 })
-//       .limit(parseInt(limit))
-//       .skip((parseInt(page) - 1) * parseInt(limit))
-//       .lean();
-
-//     const total = await User.countDocuments(query);
-
-//     res.json({
-//       success: true,
-//       users,
-//       pagination: {
-//         page: parseInt(page),
-//         limit: parseInt(limit),
-//         total,
-//         pages: Math.ceil(total / limit)
-//       }
-//     });
-
-//   } catch (error) {
-//     console.error('❌ Users query error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Failed to get users'
-//     });
-//   }
-// });
-
-// // System health check
-// router.get('/health', RoleMiddleware.apply(RoleMiddleware.systemAdmin), async (req, res) => {
-//   try {
-//     const health = {
-//       status: 'healthy',
-//       timestamp: new Date().toISOString(),
-//       services: {
-//         database: 'connected',
-//         redis: 'connected', // You'd implement actual Redis health check
-//         email: 'operational'
-//       },
-//       metrics: {
-//         totalUsers: await User.countDocuments(),
-//         activeUsers: await User.countDocuments({
-//           'activityProfile.lastSeen': { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-//         }),
-//         totalReports: await Report.countDocuments(),
-//         pendingReports: await Report.countDocuments({ status: 'pending' }),
-//         auditLogsToday: await AuditLog.countDocuments({
-//           timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-//         })
-//       }
-//     };
-
-//     res.json({
-//       success: true,
-//       health
-//     });
-
-//   } catch (error) {
-//     console.error('❌ Health check error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Health check failed',
-//       health: {
-//         status: 'unhealthy',
-//         error: error.message
-//       }
-//     });
-//   }
-// });
-
-// module.exports = router;

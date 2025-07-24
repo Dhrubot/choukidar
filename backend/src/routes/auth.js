@@ -12,6 +12,7 @@ const EmailService = require('../services/emailService');
 const { requireEmailVerification, requireEmailVerificationForLogin } = require('../middleware/emailVerification');
 const { loginLimiter, passwordResetLimiter, twoFactorLimiter, refreshLimiter } = require('../middleware/rateLimiter');
 const { userTypeDetection } = require('../middleware/userTypeDetection');
+const { cacheLayer, cacheMiddleware } = require('../middleware/cacheLayer'); // Import Redis caching
 
 router.use(userTypeDetection);
 
@@ -145,6 +146,9 @@ router.post('/admin/login', loginLimiter, async (req, res) => {
     
     await adminUser.save();
     
+    // Invalidate user profile cache after login
+    await cacheLayer.delete(`auth:profile:${adminUser._id}`);
+    
     res.json({
       success: true,
       message: 'Login successful',
@@ -230,6 +234,9 @@ router.post('/admin/2fa/verify-login', twoFactorLimiter, async (req, res) => {
       'low'
     );
     
+    // Invalidate user profile cache after 2FA login
+    await cacheLayer.delete(`auth:profile:${adminUser._id}`);
+    
     res.json({
       success: true,
       message: 'Login successful',
@@ -307,6 +314,9 @@ router.post('/admin/logout', RoleMiddleware.apply(RoleMiddleware.adminOnly), asy
       'success'
     );
     
+    // Invalidate user profile cache after logout
+    await cacheLayer.delete(`auth:profile:${req.userContext.user._id}`);
+    
     res.json({
       success: true,
       message: 'Logout successful'
@@ -373,6 +383,9 @@ router.post('/admin/unlock/:userId', RoleMiddleware.apply(RoleMiddleware.superAd
     );
     
     console.log(`🔓 Account unlocked: ${targetUser.roleData.admin.username} by ${actingAdmin.roleData.admin.username}`);
+    
+    // Invalidate user profile cache after account unlock
+    await cacheLayer.delete(`auth:profile:${targetUser._id}`);
     
     res.json({
       success: true,
@@ -498,6 +511,10 @@ router.post('/reset-password', async (req, res) => {
       'high'
     );
     
+    // Invalidate user profile cache after password reset
+    await cacheLayer.delete(`auth:profile:${user._id}`);
+    await cacheLayer.deletePattern('auth:security:*'); // Invalidate security insights
+    
     res.json({
       success: true,
       message: 'Password has been successfully reset. Please log in with your new password.'
@@ -552,6 +569,9 @@ router.get('/verify-email/:token', async (req, res) => {
       {},
       'medium'
     );
+    
+    // Invalidate user profile cache after email verification
+    await cacheLayer.delete(`auth:profile:${user._id}`);
     
     res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
     
@@ -637,6 +657,9 @@ router.delete('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly),
       'medium'
     );
     
+    // Invalidate user profile cache after session revocation
+    await cacheLayer.delete(`auth:profile:${userId}`);
+    
     res.json({
       success: true,
       message: 'All sessions revoked successfully'
@@ -652,7 +675,13 @@ router.delete('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly),
 });
 
 // GET /api/auth/security/insights - Get security insights for admin dashboard
-router.get('/security/insights', RoleMiddleware.apply(RoleMiddleware.adminOnly), async (req, res) => {
+router.get('/security/insights', 
+  RoleMiddleware.apply(RoleMiddleware.adminOnly),
+  cacheMiddleware(300, () => {
+    // Cache security insights for 5 minutes
+    return 'auth:security:insights';
+  }),
+  async (req, res) => {
   try {
     const userId = req.userContext.user._id;
     
@@ -753,6 +782,39 @@ router.get('/security/insights', RoleMiddleware.apply(RoleMiddleware.adminOnly),
       success: false,
       message: 'Error fetching security insights',
       error: error.message
+    });
+  }
+});
+
+// GET /api/auth/profile - Get user profile with caching
+router.get('/profile',
+  cacheMiddleware(600, (req) => {
+    // Cache user profiles for 10 minutes per user
+    return `auth:profile:${req.userContext.user._id}`;
+  }),
+  async (req, res) => {
+  try {
+    const user = await User.findById(req.userContext.user._id)
+      .select('-password -refreshTokens')
+      .populate('deviceFingerprint', 'trustScore riskLevel');
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user,
+        deviceFingerprint: req.userContext.deviceFingerprint
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching user profile:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch user profile.',
+      error: error.message 
     });
   }
 });

@@ -8,7 +8,8 @@ const AuditLog = require('../models/AuditLog'); // Import AuditLog for admin act
 const { userTypeDetection, requireNonQuarantined, logUserActivity } = require('../middleware/userTypeDetection'); // Import necessary middleware
 const { requireAdmin, requirePermission } = require('../middleware/roleBasedAccess'); // Corrected import
 const SocketHandler = require('../websocket/socketHandler'); // Import the SocketHandler class
-const crypto = require('crypto'); // For hashing IP addresses
+const { cacheLayer, cacheMiddleware } = require('../middleware/cacheLayer'); // Import Redis caching
+const crypto = require('crypto'); // For hashing IP addresses and cache keys
 const rateLimit = require('express-rate-limit'); // Import rate-limit
 
 // Helper function to hash an IP address
@@ -201,12 +202,20 @@ router.post('/', submitLimit, logUserActivity('submit_report'), async (req, res)
       console.warn('SocketHandler not available in app.locals. Cannot emit real-time updates.');
     }
 
-    res.status(201).json({
-      success: true,
-      message: 'Report submitted successfully and is awaiting review.',
-      reportId: newReport._id,
-      status: newReport.status
-    });
+    // Log the action for audit purposes
+    await logAdminAction(req, 'submit_report', { reportId: newReport._id, type, severity }, 'medium');
+
+    // Invalidate relevant caches after creating a new report
+    await cacheLayer.deletePattern('reports:*');
+    await cacheLayer.deletePattern('admin:*');
+    await cacheLayer.deletePattern('safezones:analytics:*');
+
+    // Emit real-time event for new report
+    if (global.socketHandler) {
+      global.socketHandler.notifyNewReport(newReport);
+    }
+
+    res.status(201).json({ success: true, message: 'Report submitted successfully.', data: newReport });
 
   } catch (error) {
     console.error('❌ Error submitting report:', error);
@@ -215,7 +224,22 @@ router.post('/', submitLimit, logUserActivity('submit_report'), async (req, res)
 });
 
 // GET /api/reports - Get all reports (admin only, or filtered for public)
-router.get('/', async (req, res) => {
+router.get('/', 
+  cacheMiddleware(300, (req) => {
+    // Custom cache key generator based on user type and query parameters
+    const queryHash = crypto.createHash('md5')
+      .update(JSON.stringify({
+        status: req.query.status,
+        type: req.query.type,
+        severity: req.query.severity,
+        genderSensitive: req.query.genderSensitive,
+        sortBy: req.query.sortBy || 'timestamp',
+        sortOrder: req.query.sortOrder || 'desc'
+      }))
+      .digest('hex');
+    return `reports:${req.userContext.userType}:${queryHash}`;
+  }),
+  async (req, res) => {
   try {
     const { status, type, severity, genderSensitive, sortBy = 'timestamp', sortOrder = 'desc' } = req.query;
     const query = {};
@@ -397,12 +421,20 @@ router.post('/:id/validate', logUserActivity('validate_report'), async (req, res
       }
     }
 
-    console.log(`✅ Report ${report._id} received community validation: ${isPositive ? 'Positive' : 'Negative'}`);
-    res.json({
-      success: true,
-      message: 'Validation recorded.',
-      communityValidation: report.communityValidation,
-      newStatus: report.status
+    await report.save();
+
+    // Invalidate caches after validation
+    await cacheLayer.deletePattern('reports:*');
+    await cacheLayer.deletePattern('admin:*');
+
+    res.json({ 
+      success: true, 
+      message: 'Validation recorded successfully.', 
+      data: { 
+        validationScore: report.validation.score,
+        status: report.status,
+        totalValidations 
+      } 
     });
 
   } catch (error) {
@@ -434,6 +466,14 @@ router.delete('/:id', requireAdmin, requirePermission('moderation'), async (req,
     if (req.app.locals.socketHandler) {
       req.app.locals.socketHandler.emitToAll('report_deleted', { reportId: id }); // Notify clients to remove from map
     }
+
+    // Log admin action
+    await logAdminAction(req, 'delete_report', { reportId: id }, 'high');
+
+    // Invalidate relevant caches after deletion
+    await cacheLayer.deletePattern('reports:*');
+    await cacheLayer.deletePattern('admin:*');
+
     res.json({ success: true, message: 'Report deleted successfully.' });
 
   } catch (error) {
