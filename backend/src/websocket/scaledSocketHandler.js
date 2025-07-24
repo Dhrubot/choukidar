@@ -636,6 +636,94 @@ class ScaledSocketHandler {
   }
 
   /**
+   * Queue event for later processing when WebSocket is not available
+   */
+  queueEvent(eventType, eventData) {
+    try {
+      const queueKey = `${eventType}_queue`;
+      
+      if (!this.eventQueues.has(queueKey)) {
+        this.eventQueues.set(queueKey, []);
+      }
+      
+      const queuedEvent = {
+        eventType,
+        eventData,
+        timestamp: Date.now(),
+        retryCount: 0,
+        maxRetries: 3
+      };
+      
+      this.eventQueues.get(queueKey).push(queuedEvent);
+      
+      console.log(`📋 Event queued: ${eventType} (queue size: ${this.eventQueues.get(queueKey).length})`);
+      
+      // Process queue if WebSocket becomes available
+      if (this.isInitialized) {
+        this.processEventQueue(queueKey);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error queuing event:', error);
+      this.failedEvents.push({ eventType, eventData, error: error.message, timestamp: Date.now() });
+    }
+  }
+
+  /**
+   * Process queued events when WebSocket becomes available
+   */
+  async processEventQueue(queueKey = null) {
+    if (!this.isInitialized) return;
+    
+    try {
+      const queuesToProcess = queueKey ? [queueKey] : Array.from(this.eventQueues.keys());
+      
+      for (const key of queuesToProcess) {
+        const queue = this.eventQueues.get(key);
+        if (!queue || queue.length === 0) continue;
+        
+        console.log(`🔄 Processing ${queue.length} queued events from ${key}`);
+        
+        const eventsToProcess = [...queue];
+        queue.length = 0; // Clear the queue
+        
+        for (const queuedEvent of eventsToProcess) {
+          try {
+            if (queuedEvent.eventType === 'admin_notification') {
+              await this.emitToAdmins(queuedEvent.eventData.eventType, queuedEvent.eventData.eventData);
+            } else {
+              // Handle other event types as needed
+              this.io.emit(queuedEvent.eventType, queuedEvent.eventData);
+            }
+            
+            console.log(`✅ Processed queued event: ${queuedEvent.eventType}`);
+            
+          } catch (error) {
+            queuedEvent.retryCount++;
+            
+            if (queuedEvent.retryCount < queuedEvent.maxRetries) {
+              // Re-queue for retry
+              queue.push(queuedEvent);
+              console.warn(`⚠️ Event retry ${queuedEvent.retryCount}/${queuedEvent.maxRetries}: ${queuedEvent.eventType}`);
+            } else {
+              // Max retries exceeded, move to failed events
+              this.failedEvents.push({
+                ...queuedEvent,
+                finalError: error.message,
+                failedAt: Date.now()
+              });
+              console.error(`❌ Event failed after ${queuedEvent.maxRetries} retries: ${queuedEvent.eventType}`);
+            }
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing event queue:', error);
+    }
+  }
+
+  /**
    * Redis connection management
    */
   async storeConnectionInRedis(connectionId, clientInfo) {

@@ -3,15 +3,19 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
 const cookieParser = require('cookie-parser');
-require('dotenv').config();
-
-const app = express();
-const PORT = process.env.PORT || 5000;
-
 // ENHANCED: Import security middleware functions as named exports
 const { userTypeDetection } = require('./src/middleware/userTypeDetection');
 // PERFORMANCE: Use scaled WebSocket handler for horizontal scaling
 const ScaledSocketHandler = require('./src/websocket/scaledSocketHandler');
+const { productionLogger, requestLogger, errorLogger, securityLogger } = require('./src/utils/productionLogger');
+const { sanitizationMiddleware, securityHeaders } = require('./src/utils/sanitization');
+const { initializeCache } = require('./src/middleware/cacheLayer');
+const { initializePerformanceTracking, trackApiPerformance, addPerformanceHeaders } = require('./src/middleware/performanceTracking');
+const { optimizeDatabase } = require('./src/models/optimizedIndexes');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
 
 // Basic Middleware (PRESERVED with cookieParser)
 app.use(cors({
@@ -43,28 +47,30 @@ app.use(cookieParser()); // IMPORTANT: Don't miss this
 //   }
 //   next();
 // });
-const { productionLogger, requestLogger, errorLogger, securityLogger } = require('./src/utils/productionLogger');
-const { sanitizationMiddleware, securityHeaders } = require('./src/utils/sanitization');
-const { initializeCache } = require('./src/middleware/cacheLayer');
-const { initializePerformanceTracking, trackApiPerformance, addPerformanceHeaders } = require('./src/middleware/performanceTracking');
 
 initializePerformanceTracking();
 
-// Add performance tracking middleware (before routes)
-app.use(trackApiPerformance);
-app.use(addPerformanceHeaders);
+// PERFORMANCE: Initialize Redis caching
+initializeCache();
 
-//logger
-app.use(requestLogger());
-app.use(securityLogger());
-app.use(errorLogger());
+// CONDITIONAL MIDDLEWARE: Apply heavy middleware only when needed
+if (process.env.NODE_ENV === 'development') {
+  // Development-only middleware
+  // Add performance tracking middleware (before routes)
+  app.use(trackApiPerformance);
+  app.use(addPerformanceHeaders);
+  //logger
+  app.use(requestLogger());
+  app.use(securityLogger());
+  app.use(errorLogger());
+} else {
+  // Production: Minimal logging, essential security only
+  app.use(errorLogger()); // Keep error logging in production
+}
 
 // SECURITY: Add input sanitization and security headers
 app.use(securityHeaders());
 app.use(sanitizationMiddleware());
-
-// PERFORMANCE: Initialize Redis caching
-initializeCache();
 
 // ENHANCED: Security middleware - Apply device fingerprinting and user context to all requests
 app.use(userTypeDetection);
@@ -119,8 +125,6 @@ const server = http.createServer(app);
 // // Check WebSocket stats
 // const socketHandler = global.socketHandler;
 // socketHandler.healthCheck();
-
-const { optimizeDatabase } = require('./src/models/optimizedIndexes');
 
 mongoose.connection.on('connected', async () => {
   console.log('✅ Connected to MongoDB');
