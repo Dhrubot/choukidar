@@ -219,43 +219,9 @@ const userSchema = new mongoose.Schema({
     }
   }
 }, {
-  timestamps: true,
-  // OPTIMIZED: Replace 15+ individual indexes with 5 strategic compound indexes
-  // Based on actual query patterns and performance analysis
-  indexes: [
-    // Primary lookup index - most common queries (userType + security risk)
-    { 
-      userType: 1, 
-      'securityProfile.securityRiskLevel': 1 
-    },
-    
-    // Admin operations index - login and management queries
-    { 
-      'roleData.admin.username': 1, 
-      'roleData.admin.email': 1,
-      'roleData.admin.adminLevel': -1
-    },
-    
-    // Security monitoring index - quarantine and trust score queries
-    { 
-      'securityProfile.quarantineStatus': 1, 
-      'securityProfile.overallTrustScore': -1,
-      'activityProfile.lastSeen': -1 
-    },
-    
-    // Device fingerprint lookup - anonymous user tracking
-    { 
-      'anonymousProfile.deviceFingerprint': 1,
-      userType: 1
-    },
-    
-    // Activity analysis index - user behavior patterns
-    {
-      'activityProfile.lastSeen': -1,
-      'activityProfile.totalSessions': -1,
-      userType: 1
-    }
-  ]
+  timestamps: true
+  // REMOVED: Schema-level indexes - now managed centrally by optimizedIndexes.js
+  // This prevents duplicate index creation and provides better management
 });
 
 // === SECURITY METHODS ===

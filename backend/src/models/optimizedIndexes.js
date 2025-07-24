@@ -159,6 +159,53 @@ class DatabaseOptimizer {
         options: { name: 'user_audit_tracking_idx', background: true }
       }
     ]);
+
+    // SafeZone Collection - Optimize for location and female safety queries
+    this.optimizedIndexes.set('safezones', [
+      // Geospatial index (CRITICAL for location queries)
+      { 
+        fields: { "location": "2dsphere" },
+        options: { name: 'location_geo_idx', background: true }
+      },
+      
+      // Primary filtering index (most common query pattern)
+      { 
+        fields: { status: 1, zoneType: 1, category: 1 },
+        options: { name: 'primary_filter_idx', background: true }
+      },
+      
+      // Location hierarchy index (district/thana queries)
+      { 
+        fields: { "address.district": 1, "address.thana": 1, status: 1 },
+        options: { name: 'location_hierarchy_idx', background: true }
+      },
+      
+      // Female safety index (specialized queries)
+      { 
+        fields: { 
+          "femaleSafety.overallFemaleSafety": -1,
+          "femaleSafety.culturallyAppropriate": 1,
+          status: 1
+        },
+        options: { name: 'female_safety_idx', background: true }
+      },
+      
+      // Safety scoring index (analytics queries)
+      {
+        fields: { safetyScore: -1, status: 1, zoneType: 1 },
+        options: { name: 'safety_scoring_idx', background: true }
+      },
+      
+      // Female verification index (trust and verification queries)
+      {
+        fields: { 
+          "femaleVerification.verifiedByFemale": 1,
+          "femaleSafety.conservativeAreaFriendly": 1,
+          status: 1
+        },
+        options: { name: 'female_verification_idx', background: true }
+      }
+    ]);
   }
 
   /**
@@ -175,7 +222,7 @@ class DatabaseOptimizer {
 
     try {
       // Analyze each collection
-      const collections = ['users', 'devicefingerprints', 'reports', 'auditlogs'];
+      const collections = ['users', 'devicefingerprints', 'reports', 'auditlogs', 'safezones'];
       
       for (const collectionName of collections) {
         try {
@@ -510,7 +557,7 @@ class DatabaseOptimizer {
    */
   async healthCheck() {
     try {
-      const collections = ['users', 'reports', 'devicefingerprints'];
+      const collections = ['users', 'reports', 'devicefingerprints', 'auditlogs', 'safezones'];
       const health = {};
       
       for (const collectionName of collections) {

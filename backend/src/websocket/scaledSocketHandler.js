@@ -135,6 +135,17 @@ class ScaledSocketHandler {
       // Connect Redis clients
       await Promise.all([pubClient.connect(), subClient.connect()]);
 
+      // Handle Redis client events (not adapter events)
+      pubClient.on('error', (error) => {
+        console.error('❌ Redis pub client error:', error);
+        this.metrics.errors++;
+      });
+
+      subClient.on('error', (error) => {
+        console.error('❌ Redis sub client error:', error);
+        this.metrics.errors++;
+      });
+
       // Create and attach Redis adapter
       this.redisAdapter = createAdapter(pubClient, subClient, {
         key: 'safestreets:socketio',
@@ -142,12 +153,6 @@ class ScaledSocketHandler {
       });
 
       this.io.adapter(this.redisAdapter);
-
-      // Handle Redis adapter events
-      this.redisAdapter.on('error', (error) => {
-        console.error('❌ Redis adapter error:', error);
-        this.metrics.errors++;
-      });
 
       console.log('✅ Redis adapter configured for horizontal scaling');
 

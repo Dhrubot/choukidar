@@ -237,36 +237,9 @@ const reportSchema = new mongoose.Schema({
     requiresFemaleValidators: { type: Boolean, default: false }
   }
 }, {
-  timestamps: true,
-  // OPTIMIZED: Replace 6 individual indexes with 4 strategic compound indexes
-  // Based on actual query patterns: filtering by type+status, location queries, security analysis
-  indexes: [
-    // Primary query index - most common filtering (type + status + severity)
-    { 
-      type: 1, 
-      status: 1, 
-      severity: -1 
-    },
-    
-    // Geospatial index for location-based queries (preserved as required)
-    { 
-      "location.coordinates": "2dsphere" 
-    },
-    
-    // Security and device tracking index
-    { 
-      deviceFingerprint: 1,
-      "securityProfile.trustScore": -1,
-      createdAt: -1
-    },
-    
-    // Time-based analysis index for recent reports and trends
-    {
-      createdAt: -1,
-      type: 1,
-      "location.district": 1
-    }
-  ]
+  timestamps: true
+  // REMOVED: Schema-level indexes - now managed centrally by optimizedIndexes.js
+  // This prevents duplicate index creation and provides better management
 });
 
 // Enhanced pre-save middleware for location obfuscation and security analysis

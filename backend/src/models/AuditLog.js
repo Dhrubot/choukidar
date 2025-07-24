@@ -66,11 +66,8 @@ const auditLogSchema = new mongoose.Schema({
   timestamps: true // Adds createdAt and updatedAt
 });
 
-// Indexes for efficient querying
-auditLogSchema.index({ 'actor.userId': 1, timestamp: -1 });
-auditLogSchema.index({ actionType: 1, timestamp: -1 });
-auditLogSchema.index({ 'target.id': 1, timestamp: -1 });
-auditLogSchema.index({ severity: 1, timestamp: -1 });
+// REMOVED: Schema-level indexes - now managed centrally by optimizedIndexes.js
+// This prevents duplicate index creation and provides better management
 
 const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 

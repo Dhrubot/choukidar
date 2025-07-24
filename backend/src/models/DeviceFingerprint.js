@@ -185,37 +185,9 @@ const deviceFingerprintSchema = new mongoose.Schema({
     politicalManipulationScore: { type: Number, default: 0 }
   }
 }, {
-  timestamps: true,
-  // OPTIMIZED: Replace 6 individual indexes with 4 strategic compound indexes
-  // Based on security query patterns: device lookup, threat analysis, trust scoring
-  indexes: [
-    // Primary device lookup index
-    { 
-      fingerprintId: 1,
-      userId: 1
-    },
-    
-    // Security monitoring index - most critical for threat detection
-    { 
-      'securityProfile.riskLevel': 1,
-      'securityProfile.trustScore': -1,
-      'threatIntelligence.threatConfidence': -1
-    },
-    
-    // Bangladesh-specific security analysis
-    {
-      'bangladeshProfile.crossBorderSuspicion': -1,
-      'securityProfile.quarantined': 1,
-      lastSeen: -1
-    },
-    
-    // Activity and behavior analysis index
-    {
-      lastSeen: -1,
-      'behaviorProfile.humanBehaviorScore': -1,
-      'securityProfile.trustScore': -1
-    }
-  ]
+  timestamps: true
+  // REMOVED: Schema-level indexes - now managed centrally by optimizedIndexes.js
+  // This prevents duplicate index creation and provides better management
 });
 
 // Security Analysis Methods

@@ -681,13 +681,8 @@ const safeZoneSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// PRESERVED: All original indexes + Enhanced with female safety
-safeZoneSchema.index({ "location": "2dsphere" }); // Geospatial index
-safeZoneSchema.index({ zoneType: 1, category: 1, status: 1 });
-safeZoneSchema.index({ "address.district": 1, "address.thana": 1, zoneType: 1 });
-safeZoneSchema.index({ status: 1, safetyScore: -1, "femaleSafety.overallFemaleSafety": -1 });
-safeZoneSchema.index({ "femaleSafety.culturallyAppropriate": 1, "femaleSafety.conservativeAreaFriendly": 1, "femaleVerification.verifiedByFemale": 1 });
-safeZoneSchema.index({ "address.culturalArea": 1, "femaleSafety.overallFemaleSafety": -1 });
+// REMOVED: All schema-level indexes - now managed centrally by optimizedIndexes.js
+// This prevents duplicate index creation and provides better centralized management
 
 // PRESERVED: Original virtual + Enhanced
 safeZoneSchema.virtual('currentSafetyScore').get(function() {
