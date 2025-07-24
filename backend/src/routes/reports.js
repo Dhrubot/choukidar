@@ -191,6 +191,22 @@ router.post('/', submitLimit, logUserActivity('submit_report'), async (req, res)
 
     console.log(`✅ New report submitted: ${newReport._id} by ${submittedByUserType} user ${submittedByUserId}`);
 
+    // === FIX  GRANULAR CACHE INVALIDATION ===
+    // Instead of wiping the entire cache with deletePattern, invalidate only what's necessary.
+    // This prevents cache thrashing and allows analytics endpoints to stay fast.
+ // === FIX : GRANULAR CACHE INVALIDATION ===
+    // Instead of wiping the entire cache with deletePattern, invalidate only what's necessary.
+    // This prevents cache thrashing and allows analytics endpoints to stay fast.
+    console.log('🗑️ Invalidating specific caches due to new report submission...');
+    await Promise.all([
+      cacheLayer.delete('admin:dashboard:stats'),
+      cacheLayer.delete('admin:analytics:security'),
+      // Let paginated report lists expire via TTL instead of scanning keys.
+      // This is a safe and performant approach.
+    ]);
+    // REMOVED: await cacheLayer.deletePattern('reports:*');
+    // REMOVED: await cacheLayer.deletePattern('admin:*');
+    // REMOVED: await cacheLayer.deletePattern('safezones:analytics:*');
     // --- Real-time Notification for Admins (and potentially nearby users later) ---
     if (req.app.locals.socketHandler) {
       req.app.locals.socketHandler.emitToAdmins('new_pending_report', {
@@ -214,11 +230,7 @@ router.post('/', submitLimit, logUserActivity('submit_report'), async (req, res)
         console.warn('⚠️ Audit logging failed:', auditError.message);
       }
     }
-
-    // Invalidate relevant caches after creating a new report
-    await cacheLayer.deletePattern('reports:*');
-    await cacheLayer.deletePattern('admin:*');
-    await cacheLayer.deletePattern('safezones:analytics:*');
+  
 
     // Real-time notifications are already handled by emitToAdmins above
     // No need for additional global.socketHandler.notifyNewReport call
@@ -311,6 +323,13 @@ router.post('/:id/status', requireAdmin, requirePermission('moderation'), async 
         { oldStatus, newStatus: status, reason: moderationReason },
         'medium'
     );
+
+    await Promise.all([
+      cacheLayer.delete(`reports:detail:${id}`), // Invalidate this specific report's cache
+      cacheLayer.delete('admin:dashboard:stats'),
+      cacheLayer.delete('admin:analytics:security'),
+      cacheLayer.delete('admin:reports:flagged') // Flagged reports list might have changed
+    ]);
 
     // If approved, send real-time notification to public clients
     if (status === 'approved') {
@@ -478,9 +497,13 @@ router.delete('/:id', requireAdmin, requirePermission('moderation'), async (req,
     // Log admin action
     await logAdminAction(req, 'delete_report', { reportId: id }, 'high');
 
-    // Invalidate relevant caches after deletion
-    await cacheLayer.deletePattern('reports:*');
-    await cacheLayer.deletePattern('admin:*');
+    // === FIX #2: GRANULAR CACHE INVALIDATION ===
+    await Promise.all([
+      cacheLayer.delete(`reports:detail:${id}`), // Invalidate this specific report's cache
+      cacheLayer.delete('admin:dashboard:stats'),
+      cacheLayer.delete('admin:analytics:security'),
+      cacheLayer.delete('admin:reports:flagged')
+    ]);
 
     res.json({ success: true, message: 'Report deleted successfully.' });
 

@@ -485,9 +485,12 @@ router.post('/admin/create',
         { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
     );
 
-    // Invalidate relevant caches after creating a new safe zone
-    await cacheLayer.deletePattern('safezones:*');
-    await cacheLayer.deletePattern('admin:*');
+      // === FIX #2: GRANULAR CACHE INVALIDATION ===
+    await Promise.all([
+        cacheLayer.delete('safezones:analytics:public'),
+        cacheLayer.delete('admin:dashboard:stats')
+        // Let map view caches expire naturally via their TTL
+    ]);
 
     console.log(`✅ Admin created safe zone: ${safeZone.name} (${safeZone.zoneType})`);
 
@@ -539,8 +542,11 @@ router.put('/admin/:id',
     );
 
     // Invalidate relevant caches after updating a safe zone
-    await cacheLayer.deletePattern('safezones:*');
-    await cacheLayer.deletePattern('admin:*');
+     await Promise.all([
+        cacheLayer.delete(`safezone:detail:${req.params.id}`), // Invalidate this specific zone
+        cacheLayer.delete('safezones:analytics:public'),
+        cacheLayer.delete('admin:dashboard:stats')
+    ]);
 
     console.log(`✅ Admin updated safe zone: ${safeZone.name}`);
 
@@ -585,8 +591,12 @@ router.delete('/admin/:id',
     );
 
     // Invalidate relevant caches after deleting a safe zone
-    await cacheLayer.deletePattern('safezones:*');
-    await cacheLayer.deletePattern('admin:*');
+    // === FIX #2: GRANULAR CACHE INVALIDATION ===
+    await Promise.all([
+        cacheLayer.delete(`safezone:detail:${req.params.id}`),
+        cacheLayer.delete('safezones:analytics:public'),
+        cacheLayer.delete('admin:dashboard:stats')
+    ])
 
     console.log(`✅ Admin deleted safe zone: ${safeZone.name}`);
 

@@ -151,10 +151,10 @@ class DeviceFingerprintProcessor {
       const queueKey = this.config.redisQueueKey;
       const score = Date.now() + (1000000 - jobPriority); // Higher priority = lower score for Redis ZSET
       
-      await cacheLayer.client.zadd(queueKey, score, JSON.stringify(job));
+      await cacheLayer.zadd(queueKey, score, JSON.stringify(job));
       
       // Update local queue length for stats
-      this.stats.queueLength = await cacheLayer.client.zcard(queueKey);
+      this.stats.queueLength = await cacheLayer.zcard(queueKey);
       
       productionLogger.debug('Job queued for device analysis', {
         jobId,
@@ -253,7 +253,7 @@ class DeviceFingerprintProcessor {
    */
   async cleanupStaleProcessors() {
     try {
-      const processorKeys = await cacheLayer.client.keys('safestreets:processors:*');
+      const processorKeys = await cacheLayer.scanKeys('safestreets:processors:*');
       const staleThreshold = Date.now() - (this.config.heartbeatInterval * 3); // 3 missed heartbeats
       
       for (const key of processorKeys) {
@@ -306,7 +306,7 @@ class DeviceFingerprintProcessor {
       const expiredThreshold = Date.now() - (this.config.jobTimeout * 2);
       
       // Remove jobs older than 2x timeout
-      const expiredCount = await cacheLayer.client.zremrangebyscore(
+      const expiredCount = await cacheLayer.zRemRangeByScore(
         queueKey, 
         '-inf', 
         expiredThreshold
@@ -326,7 +326,7 @@ class DeviceFingerprintProcessor {
   async rebalanceFailedJobs() {
     try {
       const failedJobsKey = 'safestreets:device:processing:failed';
-      const failedJobs = await cacheLayer.client.lrange(failedJobsKey, 0, -1);
+      const failedJobs = await cacheLayer.lRange(failedJobsKey, 0, -1);
       
       for (const jobStr of failedJobs) {
         try {
@@ -340,10 +340,10 @@ class DeviceFingerprintProcessor {
             
             // Re-queue with lower priority
             const score = Date.now() + (1000000 - (job.priority - 10));
-            await cacheLayer.client.zadd(this.config.redisQueueKey, score, JSON.stringify(job));
+            await cacheLayer.zadd(this.config.redisQueueKey, score, JSON.stringify(job));
             
             // Remove from failed queue
-            await cacheLayer.client.lrem(failedJobsKey, 1, jobStr);
+            await cacheLayer.lrem(failedJobsKey, 1, jobStr);
             
             productionLogger.info('Requeued failed job', {
               jobId: job.id,
@@ -365,7 +365,7 @@ class DeviceFingerprintProcessor {
    */
   async updateQueueStats() {
     try {
-      this.stats.queueLength = await cacheLayer.client.zcard(this.config.redisQueueKey);
+      this.stats.queueLength = await cacheLayer.zcard(this.config.redisQueueKey);
       this.stats.activeJobs = this.activeJobs.size;
       
       // Cache stats for monitoring
@@ -429,7 +429,7 @@ class DeviceFingerprintProcessor {
       if (batchSize <= 0) return [];
 
       // Get highest priority jobs (lowest scores)
-      const jobStrings = await cacheLayer.client.zpopmin(queueKey, batchSize);
+      const jobObjects = await cacheLayer.zpopmin(queueKey, batchSize);
       
       const jobs = [];
       for (let i = 0; i < jobStrings.length; i += 2) {
@@ -543,13 +543,13 @@ class DeviceFingerprintProcessor {
         processedBy: this.processId
       };
       
-      await cacheLayer.client.lpush(
+      await cacheLayer.lpush(
         'safestreets:device:processing:failed',
         JSON.stringify(failedJob)
       );
       
       // Limit failed job queue size
-      await cacheLayer.client.ltrim('safestreets:device:processing:failed', 0, 999);
+      await cacheLayer.ltrim('safestreets:device:processing:failed', 0, 999);
       
     } catch (cacheError) {
       productionLogger.debug('Failed to cache failed job', { error: cacheError.message });
@@ -1588,7 +1588,7 @@ class DeviceFingerprintProcessor {
   async getHealth() {
     try {
       const redisHealth = await cacheLayer.healthCheck();
-      const queueLength = await cacheLayer.client.zcard(this.config.redisQueueKey);
+      const queueLength = await cacheLayer.zcard(this.config.redisQueueKey);
       
       return {
         status: this.shutdownInitiated ? 'shutting_down' : 'healthy',
@@ -1656,7 +1656,7 @@ class DeviceFingerprintProcessor {
             };
             
             const score = Date.now() + (1000000 - job.priority);
-            await cacheLayer.client.zadd(this.config.redisQueueKey, score, JSON.stringify(job));
+            await cacheLayer.zadd(this.config.redisQueueKey, score, JSON.stringify(job));
           } catch (error) {
             productionLogger.error('Failed to requeue cancelled job', {
               jobId,
@@ -1727,7 +1727,7 @@ class DeviceFingerprintProcessor {
    */
   async clearQueue() {
     try {
-      const clearedCount = await cacheLayer.client.del(this.config.redisQueueKey);
+      const clearedCount = await cacheLayer.delete(this.config.redisQueueKey);
       this.processingQueue = [];
       
       productionLogger.warn('Processing queue cleared', {

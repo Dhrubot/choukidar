@@ -1,18 +1,16 @@
 // === backend/src/websocket/scaledSocketHandler.js ===
 // Horizontally Scalable WebSocket Handler for SafeStreets Bangladesh
 // Solves the single-server WebSocket scaling limitations
+// === Enhanced ScaledSocketHandler with missing features ===
 
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const DeviceFingerprint = require('../models/DeviceFingerprint');
+const Report = require('../models/Report');
 const { cacheLayer } = require('../middleware/cacheLayer');
 
-/**
- * Horizontally Scalable WebSocket Handler
- * Features: Redis adapter, distributed sessions, load balancing, fault tolerance
- */
-class ScaledSocketHandler {
+class EnhancedScaledSocketHandler {
   constructor(server) {
     this.server = server;
     this.io = null;
@@ -20,8 +18,8 @@ class ScaledSocketHandler {
     this.isInitialized = false;
     
     // Connection tracking with Redis backing
-    this.localConnections = new Map(); // Local server connections
-    this.adminChannels = new Set(['security_monitoring', 'report_updates', 'system_stats']);
+    this.localConnections = new Map();
+    this.adminChannels = new Set(['security_monitoring', 'report_updates', 'system_stats', 'female_safety_reports']);
     
     // Performance metrics
     this.metrics = {
@@ -31,14 +29,28 @@ class ScaledSocketHandler {
       broadcastsSent: 0,
       reconnections: 0,
       errors: 0,
-      startTime: Date.now()
+      startTime: Date.now(),
+      threatDetections: 0,
+      securityEvents: 0
     };
     
     // Event queues for reliability
     this.eventQueues = new Map();
     this.failedEvents = [];
     
-    this.initialize();
+    // Security monitoring state
+    this.securityChannels = new Map();
+    this.threatDetectionActive = false;
+    
+    // Initialize asynchronously - don't call in constructor
+    this.initPromise = this.initialize();
+  }
+
+  /**
+   * Wait for initialization to complete
+   */
+  async waitForInitialization() {
+    return await this.initPromise;
   }
 
   /**
@@ -46,7 +58,7 @@ class ScaledSocketHandler {
    */
   async initialize() {
     try {
-      console.log('🚀 Initializing scaled WebSocket server...');
+      console.log('🚀 Initializing enhanced scaled WebSocket server...');
 
       // Initialize Socket.IO with Redis adapter for scaling
       await this.setupSocketIO();
@@ -61,10 +73,12 @@ class ScaledSocketHandler {
       this.startBackgroundTasks();
       
       this.isInitialized = true;
-      console.log('✅ Scaled WebSocket server initialized successfully');
+      console.log('✅ Enhanced scaled WebSocket server initialized successfully');
+      
+      return this;
       
     } catch (error) {
-      console.error('❌ Failed to initialize scaled WebSocket server:', error);
+      console.error('❌ Failed to initialize enhanced scaled WebSocket server:', error);
       throw error;
     }
   }
@@ -111,7 +125,6 @@ class ScaledSocketHandler {
    */
   async setupRedisAdapter() {
     try {
-      // Import Redis adapter
       const { createAdapter } = require('@socket.io/redis-adapter');
       const { createClient } = require('redis');
 
@@ -135,7 +148,7 @@ class ScaledSocketHandler {
       // Connect Redis clients
       await Promise.all([pubClient.connect(), subClient.connect()]);
 
-      // Handle Redis client events (not adapter events)
+      // Handle Redis client events
       pubClient.on('error', (error) => {
         console.error('❌ Redis pub client error:', error);
         this.metrics.errors++;
@@ -251,6 +264,20 @@ class ScaledSocketHandler {
       await this.handleSubscription(socket, clientInfo, data);
     });
 
+    socket.on('subscribe_security', (data) => {
+      if (clientInfo.userType === 'admin') {
+        this.subscribeToSecurityEvents(socket, data);
+      } else {
+        socket.emit('error', { message: 'Unauthorized' });
+      }
+    });
+
+    socket.on('subscribe_reports', (data) => {
+      if (clientInfo.userType === 'admin') {
+        this.subscribeToReportUpdates(socket, data);
+      }
+    });
+
     socket.on('unsubscribe', async (data) => {
       await this.handleUnsubscription(socket, clientInfo, data);
     });
@@ -279,24 +306,30 @@ class ScaledSocketHandler {
   }
 
   /**
-   * Handle user authentication
+   * Enhanced authentication with device fingerprint support
    */
   async handleAuthentication(socket, clientInfo, data) {
-    const { token, deviceFingerprint } = data;
+    const { token, deviceFingerprint, userType } = data;
 
     try {
-      // Verify JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.userId);
+      let user = null;
+      
+      // Handle JWT token auth or device fingerprint auth
+      if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        user = await User.findById(decoded.userId);
+        if (!user) throw new Error('User not found');
+      }
 
-      if (!user) {
-        throw new Error('User not found');
+      // Always handle device fingerprint (from original)
+      if (deviceFingerprint) {
+        await this.handleDeviceFingerprint(socket, deviceFingerprint);
       }
 
       // Update client info
       clientInfo.authenticated = true;
-      clientInfo.userId = user._id;
-      clientInfo.userType = user.userType;
+      clientInfo.userId = user?._id || null;
+      clientInfo.userType = user?.userType || userType || 'anonymous';
       clientInfo.deviceFingerprint = deviceFingerprint;
 
       // Store in Redis for cross-server access
@@ -304,14 +337,49 @@ class ScaledSocketHandler {
 
       socket.emit('authenticated', {
         success: true,
-        userType: user.userType,
-        permissions: user.roleData?.admin?.permissions || []
+        userType: clientInfo.userType,
+        deviceFingerprint: clientInfo.deviceFingerprint,
+        permissions: user?.roleData?.admin?.permissions || []
       });
 
-      console.log(`🔑 User authenticated: ${socket.id} (${user.userType})`);
+      console.log(`🔑 User authenticated: ${socket.id} (${clientInfo.userType})`);
 
     } catch (error) {
       throw new Error(`Authentication failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle device fingerprint (from original)
+   */
+  async handleDeviceFingerprint(socket, deviceFingerprint) {
+    try {
+      // Find or create device fingerprint
+      let device = await DeviceFingerprint.findOne({ 
+        fingerprintId: deviceFingerprint 
+      });
+
+      if (!device) {
+        device = new DeviceFingerprint({
+          fingerprintId: deviceFingerprint,
+          deviceSignature: {
+            userAgentHash: 'websocket_client',
+            deviceType: 'unknown'
+          }
+        });
+        await device.save();
+      }
+
+      // Update last seen and activity
+      device.lastSeen = new Date();
+      device.activityProfile.totalWebSocketConnections = 
+        (device.activityProfile.totalWebSocketConnections || 0) + 1;
+      await device.save();
+
+      socket.deviceFingerprint = deviceFingerprint;
+      
+    } catch (error) {
+      console.error('❌ Device fingerprint handling error:', error);
     }
   }
 
@@ -360,7 +428,7 @@ class ScaledSocketHandler {
           permissions: adminUser.roleData.admin.permissions,
           adminLevel: adminUser.roleData.admin.adminLevel
         },
-        availableChannels: this.adminChannels
+        availableChannels: Array.from(this.adminChannels)
       });
 
       console.log(`🔑 Admin authenticated: ${socket.id} (${adminUser.roleData.admin.username})`);
@@ -371,7 +439,7 @@ class ScaledSocketHandler {
   }
 
   /**
-   * Handle channel subscriptions
+   * Enhanced subscription handling with filtering options (from original)
    */
   async handleSubscription(socket, clientInfo, data) {
     const { channels, options = {} } = data;
@@ -388,6 +456,13 @@ class ScaledSocketHandler {
       for (const channel of validChannels) {
         socket.join(channel);
         clientInfo.rooms.push(channel);
+
+        // Handle specific subscription types with options
+        if (channel === 'security_monitoring') {
+          await this.subscribeToSecurityEvents(socket, options);
+        } else if (channel === 'report_updates') {
+          await this.subscribeToReportUpdates(socket, options);
+        }
 
         // Store subscription preferences in Redis
         await this.storeSubscription(socket.id, channel, options);
@@ -407,6 +482,59 @@ class ScaledSocketHandler {
       console.error(`❌ Subscription error for ${socket.id}:`, error);
       socket.emit('subscription_error', { message: error.message });
     }
+  }
+
+  /**
+   * Security events subscription with filtering (from original)
+   */
+  async subscribeToSecurityEvents(socket, options = {}) {
+    const { 
+      threatLevel = 'all',
+      deviceEvents = true,
+      reportEvents = true,
+      systemEvents = true 
+    } = options;
+
+    const channelKey = `security_${socket.id}`;
+    this.securityChannels.set(channelKey, {
+      socket,
+      options,
+      subscribedAt: new Date()
+    });
+
+    socket.join('security_monitoring');
+
+    socket.emit('security_subscription_confirmed', {
+      success: true,
+      channelKey,
+      options
+    });
+
+    console.log(`🔐 Admin subscribed to security events: ${socket.id}`);
+  }
+
+  /**
+   * Report updates subscription with filtering (from original)
+   */
+  async subscribeToReportUpdates(socket, options = {}) {
+    const { 
+      status = 'all',
+      priority = 'all',
+      femaleSafety = false 
+    } = options;
+
+    socket.join('report_updates');
+
+    if (femaleSafety) {
+      socket.join('female_safety_reports');
+    }
+
+    socket.emit('report_subscription_confirmed', {
+      success: true,
+      options
+    });
+
+    console.log(`📊 Admin subscribed to report updates: ${socket.id}`);
   }
 
   /**
@@ -437,7 +565,7 @@ class ScaledSocketHandler {
   }
 
   /**
-   * Handle disconnection
+   * Enhanced cleanup on disconnection
    */
   async handleDisconnection(connectionId, reason) {
     try {
@@ -452,6 +580,10 @@ class ScaledSocketHandler {
 
         // Clean up local storage
         this.localConnections.delete(connectionId);
+
+        // Clean up security channels (from original)
+        const channelKey = `security_${connectionId}`;
+        this.securityChannels.delete(channelKey);
 
         // Clean up Redis storage
         await this.removeConnectionFromRedis(connectionId);
@@ -489,6 +621,7 @@ class ScaledSocketHandler {
       }
 
       this.metrics.broadcastsSent++;
+      this.metrics.securityEvents++;
       console.log(`🚨 Security event broadcasted: ${event.type} (${event.severity})`);
 
       return event.id;
@@ -500,6 +633,9 @@ class ScaledSocketHandler {
     }
   }
 
+  /**
+   * Enhanced report update broadcasting with female safety support
+   */
   async broadcastReportUpdate(reportData) {
     try {
       const event = {
@@ -516,7 +652,7 @@ class ScaledSocketHandler {
       // Broadcast to report update subscribers
       this.io.to('report_updates').emit('report_update', event);
 
-      // Special handling for female safety reports
+      // Special handling for female safety reports (from original)
       if (event.isFemaleSafety) {
         this.io.to('female_safety_reports').emit('female_safety_update', event);
       }
@@ -533,6 +669,9 @@ class ScaledSocketHandler {
     }
   }
 
+  /**
+   * Enhanced system stats broadcasting (from original)
+   */
   async broadcastSystemStats(statsData) {
     try {
       const stats = {
@@ -541,6 +680,8 @@ class ScaledSocketHandler {
         localConnections: this.localConnections.size,
         totalConnections: await this.getTotalConnections(),
         adminConnections: this.metrics.adminConnections,
+        securityChannels: this.securityChannels.size,
+        threatDetectionActive: this.threatDetectionActive,
         metrics: this.metrics,
         uptime: Date.now() - this.metrics.startTime,
         ...statsData
@@ -594,7 +735,6 @@ class ScaledSocketHandler {
 
   /**
    * Emit event specifically to admin users
-   * This method is expected by the reports route for admin notifications
    */
   async emitToAdmins(eventType, eventData) {
     try {
@@ -636,7 +776,168 @@ class ScaledSocketHandler {
   }
 
   /**
-   * Queue event for later processing when WebSocket is not available
+   * Threat detection and broadcasting (from original)
+   */
+  async detectAndBroadcastThreats() {
+    if (!this.threatDetectionActive) return;
+
+    try {
+      // Check for coordinated attacks
+      const coordinatedAttacks = await this.detectCoordinatedAttacks();
+      if (coordinatedAttacks.length > 0) {
+        coordinatedAttacks.forEach(attack => {
+          this.broadcastSecurityEvent({
+            type: 'coordinated_attack',
+            severity: attack.severity,
+            details: attack,
+            deviceFingerprint: null
+          });
+        });
+      }
+
+      // Check for suspicious device patterns
+      const suspiciousDevices = await this.detectSuspiciousDevices();
+      if (suspiciousDevices.length > 0) {
+        suspiciousDevices.forEach(device => {
+          this.broadcastSecurityEvent({
+            type: 'suspicious_device',
+            severity: device.riskLevel,
+            deviceFingerprint: device.fingerprintId,
+            details: {
+              trustScore: device.securityProfile.trustScore,
+              violations: device.securityProfile.securityViolations
+            }
+          });
+        });
+      }
+
+      // Check for cross-border threats
+      const crossBorderThreats = await this.detectCrossBorderThreats();
+      if (crossBorderThreats.length > 0) {
+        crossBorderThreats.forEach(threat => {
+          this.broadcastSecurityEvent({
+            type: 'cross_border_threat',
+            severity: 'high',
+            details: threat,
+            deviceFingerprint: threat.deviceFingerprint
+          });
+        });
+      }
+
+      this.metrics.threatDetections++;
+
+    } catch (error) {
+      console.error('❌ Error in threat detection:', error);
+    }
+  }
+
+  /**
+   * Detect coordinated attacks (from original)
+   */
+  async detectCoordinatedAttacks() {
+    const recentReports = await Report.find({
+      timestamp: { $gte: new Date(Date.now() - 3600000) }, // Last hour
+      status: { $in: ['pending', 'approved'] }
+    });
+
+    const attacks = [];
+    
+    // Group by similar timestamps (within 10 minutes)
+    const timeGroups = {};
+    recentReports.forEach(report => {
+      const timeKey = Math.floor(report.timestamp.getTime() / (10 * 60 * 1000));
+      if (!timeGroups[timeKey]) timeGroups[timeKey] = [];
+      timeGroups[timeKey].push(report);
+    });
+
+    // Check for suspicious patterns
+    Object.values(timeGroups).forEach(group => {
+      if (group.length >= 5) { // 5+ reports in 10 minutes
+        attacks.push({
+          type: 'rapid_reporting',
+          severity: 'high',
+          reportCount: group.length,
+          timeWindow: '10_minutes',
+          pattern: 'high_frequency'
+        });
+      }
+    });
+
+    return attacks;
+  }
+
+  /**
+   * Detect suspicious devices (from original)
+   */
+  async detectSuspiciousDevices() {
+    return await DeviceFingerprint.find({
+      'securityProfile.riskLevel': { $in: ['high', 'critical'] },
+      'securityProfile.quarantineStatus': false,
+      lastSeen: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Active in last 24h
+    }).limit(10);
+  }
+
+  /**
+   * Detect cross-border threats (from original)
+   */
+  async detectCrossBorderThreats() {
+    const crossBorderReports = await Report.find({
+      'securityFlags.crossBorderReport': true,
+      timestamp: { $gte: new Date(Date.now() - 3600000) }, // Last hour
+      status: 'pending'
+    });
+
+    return crossBorderReports.map(report => ({
+      reportId: report._id,
+      location: report.location,
+      deviceFingerprint: report.submittedBy?.deviceFingerprint,
+      timestamp: report.timestamp
+    }));
+  }
+
+  /**
+   * Enhanced background tasks with threat detection
+   */
+  startBackgroundTasks() {
+    // Enable threat detection
+    this.threatDetectionActive = true;
+
+    // Threat detection every 2 minutes (from original)
+    setInterval(() => {
+      this.detectAndBroadcastThreats();
+    }, 2 * 60 * 1000);
+
+    // System stats broadcasting every 30 seconds (from original)
+    setInterval(() => {
+      if (this.metrics.adminConnections > 0) {
+        this.broadcastSystemStats({
+          serverUptime: process.uptime(),
+          memoryUsage: process.memoryUsage(),
+          timestamp: new Date()
+        });
+      }
+    }, 30 * 1000);
+
+    // Connection cleanup task
+    setInterval(async () => {
+      await this.cleanupStaleConnections();
+    }, 300000); // 5 minutes
+
+    // Metrics reporting
+    setInterval(async () => {
+      await this.reportMetrics();
+    }, 60000); // 1 minute
+
+    // Failed event retry
+    setInterval(async () => {
+      await this.retryFailedEvents();
+    }, 30000); // 30 seconds
+
+    console.log('🔄 Enhanced background tasks started (including threat detection)');
+  }
+
+  /**
+   * Queue event for later processing
    */
   queueEvent(eventType, eventData) {
     try {
@@ -791,7 +1092,7 @@ class ScaledSocketHandler {
 
     try {
       // Get all connection keys from Redis
-      const keys = await cacheLayer.client.keys('websocket:connection:*');
+      const keys = await cacheLayer.scanKeys('websocket:connection:*');
       return keys.length;
     } catch (error) {
       console.error('❌ Error getting total connections:', error);
@@ -814,25 +1115,6 @@ class ScaledSocketHandler {
   /**
    * Background tasks
    */
-  startBackgroundTasks() {
-    // Connection cleanup task
-    setInterval(async () => {
-      await this.cleanupStaleConnections();
-    }, 300000); // 5 minutes
-
-    // Metrics reporting
-    setInterval(async () => {
-      await this.reportMetrics();
-    }, 60000); // 1 minute
-
-    // Failed event retry
-    setInterval(async () => {
-      await this.retryFailedEvents();
-    }, 30000); // 30 seconds
-
-    console.log('🔄 Background tasks started');
-  }
-
   async cleanupStaleConnections() {
     try {
       const staleThreshold = Date.now() - (10 * 60 * 1000); // 10 minutes
@@ -913,6 +1195,8 @@ class ScaledSocketHandler {
         totalConnections,
         adminConnections: this.metrics.adminConnections,
         redisAdapter: !!this.redisAdapter,
+        threatDetectionActive: this.threatDetectionActive,
+        securityChannels: this.securityChannels.size,
         metrics: this.metrics,
         uptime: Date.now() - this.metrics.startTime,
         failedEventsCount: this.failedEvents.length
@@ -932,7 +1216,10 @@ class ScaledSocketHandler {
    */
   async shutdown() {
     try {
-      console.log('🔄 Shutting down scaled WebSocket server...');
+      console.log('🔄 Shutting down enhanced scaled WebSocket server...');
+
+      // Disable threat detection
+      this.threatDetectionActive = false;
 
       // Close all connections gracefully
       this.io.emit('server_shutdown', {
@@ -951,7 +1238,7 @@ class ScaledSocketHandler {
         await this.redisAdapter.close();
       }
 
-      console.log('✅ Scaled WebSocket server shutdown complete');
+      console.log('✅ Enhanced scaled WebSocket server shutdown complete');
 
     } catch (error) {
       console.error('❌ Error during WebSocket shutdown:', error);
@@ -959,17 +1246,20 @@ class ScaledSocketHandler {
   }
 
   /**
-   * Public API methods
+   * Public API methods with original compatibility
    */
   getConnectionStats() {
     return {
       localConnections: this.localConnections.size,
       adminConnections: this.metrics.adminConnections,
+      securityChannels: this.securityChannels.size,
       uptime: Date.now() - this.metrics.startTime,
+      threatDetectionActive: this.threatDetectionActive,
       metrics: this.metrics
     };
   }
 
+  // Original API compatibility methods
   notifySecurityEvent(eventData) {
     return this.broadcastSecurityEvent(eventData);
   }
@@ -983,7 +1273,7 @@ class ScaledSocketHandler {
   }
 }
 
-module.exports = ScaledSocketHandler;
+module.exports = EnhancedScaledSocketHandler;
 
 
 // socketHandler.notifySecurityEvent({
