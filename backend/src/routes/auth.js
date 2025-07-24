@@ -147,7 +147,8 @@ router.post('/admin/login', loginLimiter, async (req, res) => {
     await adminUser.save();
     
     // Invalidate user profile cache after login
-    await cacheLayer.delete(`auth:profile:${adminUser._id}`);
+    await cacheLayer.bumpVersion('auth');
+    console.log('🗑️ Invalidated auth cache after login');
     
     res.json({
       success: true,
@@ -235,7 +236,8 @@ router.post('/admin/2fa/verify-login', twoFactorLimiter, async (req, res) => {
     );
     
     // Invalidate user profile cache after 2FA login
-    await cacheLayer.delete(`auth:profile:${adminUser._id}`);
+    await cacheLayer.bumpVersion('auth');
+    console.log('🗑️ Invalidated auth cache after 2FA login');
     
     res.json({
       success: true,
@@ -315,7 +317,8 @@ router.post('/admin/logout', RoleMiddleware.apply(RoleMiddleware.adminOnly), asy
     );
     
     // Invalidate user profile cache after logout
-    await cacheLayer.delete(`auth:profile:${req.userContext.user._id}`);
+    await cacheLayer.bumpVersion('auth');
+    console.log('🗑️ Invalidated auth cache after logout');
     
     res.json({
       success: true,
@@ -385,7 +388,8 @@ router.post('/admin/unlock/:userId', RoleMiddleware.apply(RoleMiddleware.superAd
     console.log(`🔓 Account unlocked: ${targetUser.roleData.admin.username} by ${actingAdmin.roleData.admin.username}`);
     
     // Invalidate user profile cache after account unlock
-    await cacheLayer.delete(`auth:profile:${targetUser._id}`);
+    await cacheLayer.bumpVersion('auth');
+    console.log('🗑️ Invalidated auth cache after account unlock');
     
     res.json({
       success: true,
@@ -512,7 +516,8 @@ router.post('/reset-password', async (req, res) => {
     );
     
     // Invalidate user profile cache after password reset
-    await cacheLayer.delete(`auth:profile:${user._id}`);
+    await cacheLayer.bumpVersion('auth');
+    console.log('🗑️ Invalidated auth cache after password reset');
     await cacheLayer.deletePattern('auth:security:*'); // Invalidate security insights
     
     res.json({
@@ -571,7 +576,8 @@ router.get('/verify-email/:token', async (req, res) => {
     );
     
     // Invalidate user profile cache after email verification
-    await cacheLayer.delete(`auth:profile:${user._id}`);
+    await cacheLayer.bumpVersion('auth');
+    console.log('🗑️ Invalidated auth cache after email verification');
     
     res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
     
@@ -658,7 +664,8 @@ router.delete('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly),
     );
     
     // Invalidate user profile cache after session revocation
-    await cacheLayer.delete(`auth:profile:${userId}`);
+    await cacheLayer.bumpVersion('auth');
+    console.log('🗑️ Invalidated auth cache after session revocation');
     
     res.json({
       success: true,
@@ -680,7 +687,7 @@ router.get('/security/insights',
   cacheMiddleware(300, () => {
     // Cache security insights for 5 minutes
     return 'auth:security:insights';
-  }),
+  }, 'security'),
   async (req, res) => {
   try {
     const userId = req.userContext.user._id;
@@ -791,7 +798,7 @@ router.get('/profile',
   cacheMiddleware(600, (req) => {
     // Cache user profiles for 10 minutes per user
     return `auth:profile:${req.userContext.user._id}`;
-  }),
+  }, 'auth'),
   async (req, res) => {
   try {
     const user = await User.findById(req.userContext.user._id)

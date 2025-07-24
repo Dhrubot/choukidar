@@ -48,11 +48,14 @@ router.get('/',
         zoneType: req.query.zoneType,
         category: req.query.category,
         district: req.query.district,
-        limit: req.query.limit || 100
+        limit: req.query.limit || 100,
+        thana: req.query.thana,
+        femaleSafety: req.query.femaleSafety,
+        culturallyAppropriate: req.query.culturallyAppropriate
       }))
       .digest('hex');
     return `safezones:map:${queryHash}`;
-  }),
+  }, 'safezones'), // Add version namespace
   async (req, res) => {
   try {
     const {
@@ -63,6 +66,9 @@ router.get('/',
       zoneType,
       category,
       district,
+      thana,
+      femaleSafety,
+      culturallyAppropriate,
       limit = 100
     } = req.query;
 
@@ -84,6 +90,18 @@ router.get('/',
 
     if (district) {
       query['address.district'] = new RegExp(district, 'i');
+    }
+
+    if (thana) {
+      query['address.thana'] = new RegExp(thana, 'i');
+    }
+
+    if (femaleSafety) {
+      query.femaleSafety = femaleSafety;
+    }
+
+    if (culturallyAppropriate) {
+      query.culturallyAppropriate = culturallyAppropriate;
     }
 
     let safeZones;
@@ -188,7 +206,7 @@ router.get('/',
           location: lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : null,
           radius: lat && lng ? parseInt(radius) : null,
           minSafety: parseFloat(minSafety),
-          filters: { zoneType, category, district }
+          filters: { zoneType, category, district, thana, femaleSafety, culturallyAppropriate }
         },
         timestamp: new Date().toISOString()
       }
@@ -207,9 +225,9 @@ router.get('/',
 // GET specific safe zone by ID
 router.get('/:id', 
   cacheMiddleware(1800, (req) => {
-    // Cache individual safe zones for 30 minutes
-    return `safezone:detail:${req.params.id}`;
-  }),
+    // 30 minute cache for individual safe zones
+    return `safezones:detail:${req.params.id}`;
+  }, 'safezones'), // Add version namespace
   async (req, res) => {
   try {
     const safeZone = await SafeZone.findById(req.params.id)
@@ -245,7 +263,7 @@ router.get('/:id',
 // GET safe zones by district/thana
 router.get('/location/:district', 
   cacheMiddleware(900, (req) => {
-    // Cache location-based queries for 15 minutes
+    // 15 minute cache for location queries
     const queryHash = crypto.createHash('md5')
       .update(JSON.stringify({
         district: req.params.district,
@@ -255,8 +273,8 @@ router.get('/location/:district',
         limit: req.query.limit || 50
       }))
       .digest('hex');
-    return `safezones:location:${queryHash}`;
-  }),
+    return `safezones:location:${req.params.district}:${queryHash}`;
+  }, 'safezones'), // Add version namespace
   async (req, res) => {
   try {
     const { district } = req.params;
@@ -323,9 +341,9 @@ router.get('/location/:district',
 // GET safe zone analytics (public statistics)
 router.get('/analytics/public', 
   cacheMiddleware(1800, () => {
-    // Cache analytics for 30 minutes - same for all users
+    // 30 minute cache for public analytics
     return 'safezones:analytics:public';
-  }),
+  }, 'safezones'), // Add version namespace
   async (req, res) => {
   try {
     const stats = await SafeZone.aggregate([
@@ -485,14 +503,9 @@ router.post('/admin/create',
         { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
     );
 
-      // === FIX #2: GRANULAR CACHE INVALIDATION ===
-    await Promise.all([
-        cacheLayer.delete('safezones:analytics:public'),
-        cacheLayer.delete('admin:dashboard:stats')
-        // Let map view caches expire naturally via their TTL
-    ]);
-
-    console.log(`✅ Admin created safe zone: ${safeZone.name} (${safeZone.zoneType})`);
+    // Invalidate safe zones cache after creation
+    await cacheLayer.bumpVersion('safezones');
+    console.log('🗑️ Invalidated safezones cache after creation');
 
     res.status(201).json({
       success: true,
@@ -541,14 +554,9 @@ router.put('/admin/:id',
         { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
     );
 
-    // Invalidate relevant caches after updating a safe zone
-     await Promise.all([
-        cacheLayer.delete(`safezone:detail:${req.params.id}`), // Invalidate this specific zone
-        cacheLayer.delete('safezones:analytics:public'),
-        cacheLayer.delete('admin:dashboard:stats')
-    ]);
-
-    console.log(`✅ Admin updated safe zone: ${safeZone.name}`);
+    // Invalidate safe zones cache after update
+    await cacheLayer.bumpVersion('safezones');
+    console.log('🗑️ Invalidated safezones cache after update');
 
     res.json({
       success: true,
@@ -590,15 +598,9 @@ router.delete('/admin/:id',
         { id: safeZone._id, type: 'SafeZone', name: safeZone.name }
     );
 
-    // Invalidate relevant caches after deleting a safe zone
-    // === FIX #2: GRANULAR CACHE INVALIDATION ===
-    await Promise.all([
-        cacheLayer.delete(`safezone:detail:${req.params.id}`),
-        cacheLayer.delete('safezones:analytics:public'),
-        cacheLayer.delete('admin:dashboard:stats')
-    ])
-
-    console.log(`✅ Admin deleted safe zone: ${safeZone.name}`);
+    // Invalidate safe zones cache after deletion
+    await cacheLayer.bumpVersion('safezones');
+    console.log('🗑️ Invalidated safezones cache after deletion');
 
     res.json({
       success: true,
@@ -646,11 +648,9 @@ router.put('/admin/bulk/status',
         'high'
     );
 
-    // Invalidate relevant caches after bulk updating safe zones
-    await cacheLayer.deletePattern('safezones:*');
-    await cacheLayer.deletePattern('admin:*');
-
-    console.log(`✅ Admin bulk updated ${result.modifiedCount} safe zones to status: ${status}`);
+    // Invalidate safe zones cache after bulk update
+    await cacheLayer.bumpVersion('safezones');
+    console.log('🗑️ Invalidated safezones cache after bulk update');
 
     res.json({
       success: true,
@@ -862,9 +862,9 @@ router.post('/admin/import',
       }
     }
 
-    // Invalidate relevant caches after importing safe zones
-    await cacheLayer.deletePattern('safezones:*');
-    await cacheLayer.deletePattern('admin:*');
+    // Invalidate safe zones cache after import
+    await cacheLayer.bumpVersion('safezones');
+    console.log('🗑️ Invalidated safezones cache after import');
 
     console.log(`✅ Import completed: ${results.created} created, ${results.updated} updated, ${results.errors.length} errors`);
 

@@ -191,6 +191,10 @@ router.post('/', submitLimit, logUserActivity('submit_report'), async (req, res)
 
     console.log(`✅ New report submitted: ${newReport._id} by ${submittedByUserType} user ${submittedByUserId}`);
 
+    // Invalidate reports cache after creation
+    await cacheLayer.bumpVersion('reports');
+    console.log('🗑️ Invalidated reports cache after creation');
+
     // === FIX  GRANULAR CACHE INVALIDATION ===
     // Instead of wiping the entire cache with deletePattern, invalidate only what's necessary.
     // This prevents cache thrashing and allows analytics endpoints to stay fast.
@@ -258,7 +262,7 @@ router.get('/',
       }))
       .digest('hex');
     return `reports:${req.userContext.userType}:${queryHash}`;
-  }),
+  }, 'reports'), // Add version namespace
   async (req, res) => {
   try {
     const { status, type, severity, genderSensitive, sortBy = 'timestamp', sortOrder = 'desc' } = req.query;
@@ -323,6 +327,10 @@ router.post('/:id/status', requireAdmin, requirePermission('moderation'), async 
         { oldStatus, newStatus: status, reason: moderationReason },
         'medium'
     );
+
+    // Invalidate reports cache after status change
+    await cacheLayer.bumpVersion('reports');
+    console.log('🗑️ Invalidated reports cache after status change');
 
     await Promise.all([
       cacheLayer.delete(`reports:detail:${id}`), // Invalidate this specific report's cache
@@ -450,9 +458,9 @@ router.post('/:id/validate', logUserActivity('validate_report'), async (req, res
 
     await report.save();
 
-    // Invalidate caches after validation
-    await cacheLayer.deletePattern('reports:*');
-    await cacheLayer.deletePattern('admin:*');
+    // Invalidate reports cache after validation
+    await cacheLayer.bumpVersion('reports');
+    console.log('🗑️ Invalidated reports cache after validation');
 
     res.json({ 
       success: true, 
@@ -497,7 +505,10 @@ router.delete('/:id', requireAdmin, requirePermission('moderation'), async (req,
     // Log admin action
     await logAdminAction(req, 'delete_report', { reportId: id }, 'high');
 
-    // === FIX #2: GRANULAR CACHE INVALIDATION ===
+    // Invalidate reports cache after deletion
+    await cacheLayer.bumpVersion('reports');
+    console.log('🗑️ Invalidated reports cache after deletion');
+
     await Promise.all([
       cacheLayer.delete(`reports:detail:${id}`), // Invalidate this specific report's cache
       cacheLayer.delete('admin:dashboard:stats'),

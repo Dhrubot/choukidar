@@ -53,7 +53,7 @@ router.get('/dashboard',
   cacheMiddleware(300, () => {
     // Cache dashboard for 5 minutes - same for all admins
     return 'admin:dashboard:stats';
-  }),
+  }, 'admin'), // Add version namespace
   async (req, res) => {
   try {
     const basicStats = {
@@ -112,7 +112,7 @@ router.get('/reports/flagged',
   cacheMiddleware(180, () => {
     // Cache flagged reports for 3 minutes
     return 'admin:reports:flagged';
-  }),
+  }, 'admin'), // Add version namespace
   async (req, res) => {
   try {
     const flaggedReports = await Report.find({
@@ -158,7 +158,7 @@ router.get('/reports',
       }))
       .digest('hex');
     return `admin:reports:moderation:${queryHash}`;
-  }),
+  }, 'admin'), // Add version namespace
   async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -229,7 +229,7 @@ router.get('/reports/all',
       }))
       .digest('hex');
     return `admin:reports:all:${queryHash}`;
-  }),
+  }, 'admin'), // Add version namespace
   async (req, res) => {
   try {
     const { page = 1, limit = 50, status, severity, sortBy = 'timestamp', sortOrder = 'desc' } = req.query;
@@ -326,7 +326,7 @@ router.get('/analytics/security',
   cacheMiddleware(600, () => {
     // Cache security analytics for 10 minutes - same for all admins
     return 'admin:analytics:security';
-  }),
+  }, 'security'), // Use security namespace for security-related data
   async (req, res) => {
   try {
     const analytics = await Report.aggregate([
@@ -377,6 +377,10 @@ router.get('/analytics/security',
 // GET /api/admin/performance/report - Get comprehensive performance report
 router.get('/performance/report', 
   requirePermission('view_system_metrics'),
+  cacheMiddleware(60, () => {
+    // 1 minute cache for performance data
+    return 'admin:performance:report';
+  }, 'admin'), // Add version namespace
   async (req, res) => {
   try {
     const report = performanceMonitor.generateReport();
@@ -404,6 +408,10 @@ router.get('/performance/report',
 // GET /api/admin/performance/metrics - Get raw metrics for external monitoring
 router.get('/performance/metrics', 
   requirePermission('view_system_metrics'),
+  cacheMiddleware(30, () => {
+    // 30 second cache for raw metrics
+    return 'admin:performance:metrics';
+  }, 'admin'), // Add version namespace
   async (req, res) => {
   try {
     const metrics = performanceMonitor.exportMetrics();
@@ -434,7 +442,7 @@ router.get('/performance/database',
   cacheMiddleware(60, () => {
     // Cache database metrics for 1 minute
     return 'admin:performance:database';
-  }),
+  }, 'admin'), // Add version namespace
   async (req, res) => {
   try {
     const report = performanceMonitor.generateReport();
@@ -477,7 +485,7 @@ router.get('/performance/cache',
   cacheMiddleware(30, () => {
     // Cache cache metrics for 30 seconds (meta!)
     return 'admin:performance:cache';
-  }),
+  }, 'admin'), // Add version namespace
   async (req, res) => {
   try {
     const report = performanceMonitor.generateReport();
@@ -522,6 +530,10 @@ router.post('/performance/reset',
       'medium'
     );
 
+    // Invalidate admin performance cache after reset
+    await cacheLayer.bumpVersion('admin');
+    console.log('🗑️ Invalidated admin cache after performance reset');
+
     res.json({
       success: true,
       message: 'Performance metrics reset successfully.'
@@ -535,5 +547,15 @@ router.post('/performance/reset',
     });
   }
 });
+
+// When admin actions modify data, invalidate relevant caches
+// Example: After user management actions
+async function invalidateUserRelatedCaches() {
+  await Promise.all([
+    cacheLayer.bumpVersion('admin'),
+    cacheLayer.bumpVersion('auth')
+  ]);
+  console.log('🗑️ Invalidated admin and auth caches after user management');
+}
 
 module.exports = router;
