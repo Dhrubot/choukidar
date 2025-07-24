@@ -46,7 +46,15 @@ app.use(cookieParser()); // IMPORTANT: Don't miss this
 const { productionLogger, requestLogger, errorLogger, securityLogger } = require('./src/utils/productionLogger');
 const { sanitizationMiddleware, securityHeaders } = require('./src/utils/sanitization');
 const { initializeCache } = require('./src/middleware/cacheLayer');
+const { initializePerformanceTracking, trackApiPerformance, addPerformanceHeaders } = require('./src/middleware/performanceTracking');
 
+initializePerformanceTracking();
+
+// Add performance tracking middleware (before routes)
+app.use(trackApiPerformance);
+app.use(addPerformanceHeaders);
+
+//logger
 app.use(requestLogger());
 app.use(securityLogger());
 app.use(errorLogger());
