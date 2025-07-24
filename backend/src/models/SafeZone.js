@@ -683,26 +683,11 @@ const safeZoneSchema = new mongoose.Schema({
 
 // PRESERVED: All original indexes + Enhanced with female safety
 safeZoneSchema.index({ "location": "2dsphere" }); // Geospatial index
-safeZoneSchema.index({ zoneType: 1 });
-safeZoneSchema.index({ category: 1 });
-safeZoneSchema.index({ status: 1 });
-safeZoneSchema.index({ safetyScore: -1 });
-safeZoneSchema.index({ createdAt: -1 });
-safeZoneSchema.index({ "address.district": 1 });
-safeZoneSchema.index({ "address.thana": 1 });
-
-// ENHANCED: Female safety indexes
-safeZoneSchema.index({ "femaleSafety.overallFemaleSafety": -1 });
-safeZoneSchema.index({ "femaleSafety.culturallyAppropriate": 1 });
-safeZoneSchema.index({ "femaleSafety.conservativeAreaFriendly": 1 });
-safeZoneSchema.index({ "femaleVerification.verifiedByFemale": 1 });
-safeZoneSchema.index({ "address.culturalArea": 1 });
-
-// PRESERVED: Original compound indexes + Enhanced
-safeZoneSchema.index({ status: 1, zoneType: 1 });
-safeZoneSchema.index({ status: 1, safetyScore: -1 });
-safeZoneSchema.index({ "address.district": 1, zoneType: 1 });
-safeZoneSchema.index({ status: 1, category: 1, "femaleSafety.overallFemaleSafety": -1 });
+safeZoneSchema.index({ zoneType: 1, category: 1, status: 1 });
+safeZoneSchema.index({ "address.district": 1, "address.thana": 1, zoneType: 1 });
+safeZoneSchema.index({ status: 1, safetyScore: -1, "femaleSafety.overallFemaleSafety": -1 });
+safeZoneSchema.index({ "femaleSafety.culturallyAppropriate": 1, "femaleSafety.conservativeAreaFriendly": 1, "femaleVerification.verifiedByFemale": 1 });
+safeZoneSchema.index({ "address.culturalArea": 1, "femaleSafety.overallFemaleSafety": -1 });
 
 // PRESERVED: Original virtual + Enhanced
 safeZoneSchema.virtual('currentSafetyScore').get(function() {

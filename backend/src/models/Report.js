@@ -238,14 +238,34 @@ const reportSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true,
+  // OPTIMIZED: Replace 6 individual indexes with 4 strategic compound indexes
+  // Based on actual query patterns: filtering by type+status, location queries, security analysis
   indexes: [
-    { "location.coordinates": "2dsphere" }, // Geospatial index
-    { type: 1, status: 1 },
-    { genderSensitive: 1 },
-    { "submittedBy.deviceFingerprint": 1 },
-    { "securityFlags.crossBorderReport": 1 },
-    { "securityScore": -1 },
-    { timestamp: -1 }
+    // Primary query index - most common filtering (type + status + severity)
+    { 
+      type: 1, 
+      status: 1, 
+      severity: -1 
+    },
+    
+    // Geospatial index for location-based queries (preserved as required)
+    { 
+      "location.coordinates": "2dsphere" 
+    },
+    
+    // Security and device tracking index
+    { 
+      deviceFingerprint: 1,
+      "securityProfile.trustScore": -1,
+      createdAt: -1
+    },
+    
+    // Time-based analysis index for recent reports and trends
+    {
+      createdAt: -1,
+      type: 1,
+      "location.district": 1
+    }
   ]
 });
 

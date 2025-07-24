@@ -10,7 +10,8 @@ const PORT = process.env.PORT || 5000;
 
 // ENHANCED: Import security middleware functions as named exports
 const { userTypeDetection } = require('./src/middleware/userTypeDetection');
-const SocketHandler = require('./src/websocket/socketHandler');
+// PERFORMANCE: Use scaled WebSocket handler for horizontal scaling
+const ScaledSocketHandler = require('./src/websocket/scaledSocketHandler');
 
 // Basic Middleware (PRESERVED with cookieParser)
 app.use(cors({
@@ -44,6 +45,7 @@ app.use(cookieParser()); // IMPORTANT: Don't miss this
 // });
 const { productionLogger, requestLogger, errorLogger, securityLogger } = require('./src/utils/productionLogger');
 const { sanitizationMiddleware, securityHeaders } = require('./src/utils/sanitization');
+const { initializeCache } = require('./src/middleware/cacheLayer');
 
 app.use(requestLogger());
 app.use(securityLogger());
@@ -52,6 +54,9 @@ app.use(errorLogger());
 // SECURITY: Add input sanitization and security headers
 app.use(securityHeaders());
 app.use(sanitizationMiddleware());
+
+// PERFORMANCE: Initialize Redis caching
+initializeCache();
 
 // ENHANCED: Security middleware - Apply device fingerprinting and user context to all requests
 app.use(userTypeDetection);
@@ -108,7 +113,6 @@ const server = http.createServer(app);
 // socketHandler.healthCheck();
 
 const { optimizeDatabase } = require('./src/models/optimizedIndexes');
-const { initializeCache } = require('./src/middleware/cacheLayer');
 
 mongoose.connection.on('connected', async () => {
   console.log('✅ Connected to MongoDB');
@@ -116,12 +120,12 @@ mongoose.connection.on('connected', async () => {
   // Optimize database indexes
   await optimizeDatabase();
   
-  // Initialize Redis cache
-  await initializeCache();
-  
-  // Initialize scaled WebSocket handler
-  const ScaledSocketHandler = require('./src/websocket/scaledSocketHandler');
+  // Initialize scaled WebSocket handler with Redis backing
   const socketHandler = new ScaledSocketHandler(server);
+  app.locals.socketHandler = socketHandler;
+  global.socketHandler = socketHandler;
+  
+  console.log('🚀 SafeStreets Bangladesh server fully initialized');
 });
 
 mongoose.connection.on('error', (err) => {

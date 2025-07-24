@@ -186,14 +186,35 @@ const deviceFingerprintSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true,
-  // Optimize for security queries
+  // OPTIMIZED: Replace 6 individual indexes with 4 strategic compound indexes
+  // Based on security query patterns: device lookup, threat analysis, trust scoring
   indexes: [
-    { fingerprintId: 1 },
-    { 'securityProfile.trustScore': -1 },
-    { 'securityProfile.riskLevel': 1 },
-    { 'threatIntelligence.threatConfidence': -1 },
-    { 'bangladeshProfile.crossBorderSuspicion': -1 },
-    { lastSeen: -1 }
+    // Primary device lookup index
+    { 
+      fingerprintId: 1,
+      userId: 1
+    },
+    
+    // Security monitoring index - most critical for threat detection
+    { 
+      'securityProfile.riskLevel': 1,
+      'securityProfile.trustScore': -1,
+      'threatIntelligence.threatConfidence': -1
+    },
+    
+    // Bangladesh-specific security analysis
+    {
+      'bangladeshProfile.crossBorderSuspicion': -1,
+      'securityProfile.quarantined': 1,
+      lastSeen: -1
+    },
+    
+    // Activity and behavior analysis index
+    {
+      lastSeen: -1,
+      'behaviorProfile.humanBehaviorScore': -1,
+      'securityProfile.trustScore': -1
+    }
   ]
 });
 
