@@ -300,9 +300,17 @@ function Home() {
           </div>
           
           <div className="text-center mt-12">
-            <Link to="/map" className="btn-outline">
-              View All Reports on Map
+            <Link 
+              to="/map" 
+              className="group inline-flex items-center px-8 py-4 bg-gradient-to-r from-safe-primary to-safe-accent text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border border-safe-primary/20 hover:border-safe-primary/40"
+            >
+              <MapPin className="w-5 h-5 mr-3 group-hover:animate-bounce" />
+              <span className="text-lg">Explore Interactive Map</span>
+              <TrendingUp className="w-5 h-5 ml-3 group-hover:translate-x-1 transition-transform duration-300" />
             </Link>
+            <p className="text-sm text-neutral-500 mt-3 max-w-md mx-auto">
+              Discover safety patterns, view verified incidents, and explore community insights on our interactive map
+            </p>
           </div>
         </div>
       </section>
