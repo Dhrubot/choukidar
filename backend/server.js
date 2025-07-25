@@ -12,6 +12,7 @@ const { sanitizationMiddleware, securityHeaders } = require('./src/utils/sanitiz
 const { initializeCache } = require('./src/middleware/cacheLayer');
 const { initializePerformanceTracking, trackApiPerformance, addPerformanceHeaders } = require('./src/middleware/performanceTracking');
 const { optimizeDatabase } = require('./src/models/optimizedIndexes');
+const { optimizeMongoDB } = require('./src/config/mongodbOptimizations');
 require('dotenv').config();
 
 const app = express();
@@ -93,44 +94,31 @@ app.use((req, res, next) => {
 // input sanitizers
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI);
+// mongoose.connect(process.env.MONGODB_URI);
+mongoose.connect(process.env.MONGODB_URI, {
+  maxPoolSize: 100,
+  minPoolSize: 10,
+  socketTimeoutMS: 45000,
+  serverSelectionTimeoutMS: 5000
+});
 
 // Create HTTP server
 const server = http.createServer(app);
 
-// Database connection events with enhanced WebSocket initialization
-// mongoose.connection.on('connected', () => {
-//   console.log('✅ Connected to MongoDB');
-//   console.log('🛡️ Security middleware active - Device fingerprinting enabled');
-  
-//   // Initialize WebSocket server after database connection
-//   try {
-//     const socketHandler = new SocketHandler(server);
-//     app.locals.socketHandler = socketHandler; // Make accessible in routes
-//     global.socketHandler = socketHandler;     // Also make globally available
-//     console.log('🔌 WebSocket server initialized and ready');
-//   } catch (error) {
-//     console.error('❌ Failed to initialize WebSocket server:', error);
-//   }
-// });
-
-// // Check database optimization results
-// const optimizer = require('./src/models/optimizedIndexes');
-// optimizer.monitorPerformance(60000); // 1 minute monitoring
-
-// // Check cache performance
-// const cache = require('./src/middleware/cacheLayer');
-// cache.cacheHealthCheck();
-
-// // Check WebSocket stats
-// const socketHandler = global.socketHandler;
-// socketHandler.healthCheck();
-
 mongoose.connection.on('connected', async () => {
   console.log('✅ Connected to MongoDB');
   
-  // Optimize database indexes
-  await optimizeDatabase();
+
+   // Run expensive optimization only in development or once via env flag
+  if (process.env.RUN_INDEX_OPTIMIZATION === 'true') {
+    // Optimize database indexes
+    await optimizeDatabase();
+  }
+
+  // Safe to run on every startup (optional: guard with another flag)
+  if (process.env.RUN_MONGO_OPTIMIZERS === 'true') {
+    await optimizeMongoDB();
+  }
   
   // Initialize scaled WebSocket handler with Redis backing
   const socketHandler = new ScaledSocketHandler(server);

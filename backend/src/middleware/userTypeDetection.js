@@ -3,6 +3,7 @@ const DeviceFingerprint = require('../models/DeviceFingerprint');
 const jwt = require('jsonwebtoken'); // Assuming JWT for admin tokens
 const { getUserPermissions } = require('./roleBasedAccess'); // Import for dynamic permissions
 const crypto = require('crypto'); // For hashing IP addresses and cache keys
+const { cacheLayer } = require('../middleware/cacheLayer');
 
 /**
  * User Type Detection Middleware
