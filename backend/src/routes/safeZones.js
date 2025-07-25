@@ -7,6 +7,7 @@ const { requireAdmin, requirePermission } = require('../middleware/roleBasedAcce
 const { userTypeDetection } = require('../middleware/userTypeDetection'); // Import userTypeDetection
 const { cacheLayer, cacheMiddleware } = require('../middleware/cacheLayer'); // Import Redis caching
 const crypto = require('crypto'); // For hashing cache keys
+const { lightSanitization, fullSanitization, validationRules, validationErrorHandler } = require('../utils/sanitization');
 
 // Apply user type detection to all routes in this router
 router.use(userTypeDetection);
@@ -37,6 +38,7 @@ const logAdminAction = async (req, actionType, details = {}, severity = 'medium'
 
 // GET public safe zones (for map display)
 router.get('/', 
+  lightSanitization(), // Only sanitize query params
   cacheMiddleware(600, (req) => {
     // Custom cache key for map queries - 10 minute cache
     const queryHash = crypto.createHash('md5')
@@ -126,6 +128,7 @@ router.get('/',
       })
       .limit(parseInt(limit))
       .select('-adminNotes -analytics.viewCount') // Exclude internal data
+      .select('name location safetyScore zoneType category features address.district')
       .lean();
 
     } else {
@@ -134,6 +137,7 @@ router.get('/',
         .sort({ safetyScore: -1, createdAt: -1 })
         .limit(parseInt(limit))
         .select('-adminNotes -analytics.viewCount')
+        .select('name location safetyScore zoneType category features address.district')
         .lean();
     }
 
@@ -224,6 +228,7 @@ router.get('/',
 
 // GET specific safe zone by ID
 router.get('/:id', 
+  lightSanitization(), // Only sanitize URL params
   cacheMiddleware(1800, (req) => {
     // 30 minute cache for individual safe zones
     return `safezones:detail:${req.params.id}`;
@@ -262,6 +267,7 @@ router.get('/:id',
 
 // GET safe zones by district/thana
 router.get('/location/:district', 
+  lightSanitization(), // Only sanitize URL and query params
   cacheMiddleware(900, (req) => {
     // 15 minute cache for location queries
     const queryHash = crypto.createHash('md5')
@@ -340,6 +346,7 @@ router.get('/location/:district',
 
 // GET safe zone analytics (public statistics)
 router.get('/analytics/public', 
+  lightSanitization(), // Only sanitize query params
   cacheMiddleware(1800, () => {
     // 30 minute cache for public analytics
     return 'safezones:analytics:public';
@@ -480,6 +487,9 @@ router.get('/admin/all',
 router.post('/admin/create', 
   requireAdmin, 
   requirePermission('create_safe_zones'),
+  fullSanitization(), // Full sanitization for safe zone creation
+  validationRules.safeZoneCreation, // Structured validation for safe zone data
+  validationErrorHandler(),
   async (req, res) => {
   try {
     const safeZoneData = {
@@ -527,6 +537,7 @@ router.post('/admin/create',
 router.put('/admin/:id', 
   requireAdmin, 
   requirePermission('edit_safe_zones'),
+  fullSanitization(), // Full sanitization for updates
   async (req, res) => {
   try {
     const safeZone = await SafeZone.findByIdAndUpdate(
@@ -578,6 +589,7 @@ router.put('/admin/:id',
 router.delete('/admin/:id', 
   requireAdmin, 
   requirePermission('delete_safe_zones'),
+  fullSanitization(), // Full sanitization for deletion
   async (req, res) => {
   try {
     const safeZone = await SafeZone.findByIdAndDelete(req.params.id);
@@ -621,6 +633,7 @@ router.delete('/admin/:id',
 router.put('/admin/bulk/status', 
   requireAdmin, 
   requirePermission('manage_safe_zone_categories'),
+  fullSanitization(), // Full sanitization for bulk updates
   async (req, res) => {
   try {
     const { safeZoneIds, status } = req.body;
@@ -796,6 +809,7 @@ router.get('/admin/analytics',
 router.post('/admin/import', 
   requireAdmin, 
   requirePermission('system_configuration'),
+  fullSanitization(), // Full sanitization for import
   async (req, res) => {
   try {
     const { safeZones, source = 'import', overwrite = false } = req.body;

@@ -27,55 +27,69 @@ const userTypeDetection = async (req, res, next) => {
 
     // Extract device fingerprint from headers or body
     const deviceFingerprintId = req.headers['x-device-fingerprint'] ||
-                               req.body?.deviceFingerprint ||
-                               req.query?.deviceFingerprint;
-    
+      req.body?.deviceFingerprint || // This will no longer crash
+      req.query?.deviceFingerprint;
+
     // Extract admin session token from Authorization header or cookies
     const adminToken = req.headers['authorization']?.replace('Bearer ', '') ||
-                      req.cookies?.adminToken;
+      req.cookies?.adminToken;
 
     let userIdentified = false; // Flag to track if a user has been identified (admin, police, researcher, or existing anonymous)
 
     // --- 1. ADMIN AUTHENTICATION CHECK (Highest Priority) ---
     if (adminToken) {
-      try {
-        const decoded = jwt.verify(adminToken, process.env.JWT_SECRET); // Use your JWT_SECRET
-        const adminUser = await User.findById(decoded.userId);
+      // === THE FIX: CACHE JWT VERIFICATION ===
+      // 1. Create a secure cache key from the token itself.
+      const tokenHash = crypto.createHash('sha256').update(adminToken).digest('hex');
+      const cacheKey = `auth:token:${tokenHash}`;
+      const cachedContext = await cacheLayer.get(cacheKey);
 
-        if (adminUser && adminUser.userType === 'admin') {
-          // Check if admin account is locked
-          if (adminUser.roleData.admin.accountLocked && adminUser.roleData.admin.lockUntil > new Date()) {
-            req.userContext.userType = 'locked';
-            req.userContext.securityContext.accountLocked = true;
-            req.userContext.securityContext.lockUntil = adminUser.roleData.admin.lockUntil;
-            console.log(`🔒 Admin account locked: ${adminUser.roleData.admin.username}`);
-            userIdentified = true; // User identified as locked admin
-            return next(); // Stop processing, account is locked
+      if (cachedContext) {
+        // 2. CACHE HIT: If found, use the cached data and skip all verification.
+        req.userContext = { ...req.userContext, ...cachedContext };
+        userIdentified = true;
+        // console.log(`🔑 Admin context from CACHE for user: ${cachedContext.user.roleData.admin.username}`);
+      } else {
+        // 3. CACHE MISS: Perform the expensive verification.
+        try {
+          const decoded = jwt.verify(adminToken, process.env.JWT_SECRET); // Use your JWT_SECRET
+          const adminUser = await User.findById(decoded.userId);
+
+          if (adminUser && adminUser.userType === 'admin') {
+            // Check if admin account is locked
+            if (adminUser.roleData.admin.accountLocked && adminUser.roleData.admin.lockUntil > new Date()) {
+              req.userContext.userType = 'locked';
+              req.userContext.securityContext.accountLocked = true;
+              req.userContext.securityContext.lockUntil = adminUser.roleData.admin.lockUntil;
+              console.log(`🔒 Admin account locked: ${adminUser.roleData.admin.username}`);
+              userIdentified = true; // User identified as locked admin
+              return next(); // Stop processing, account is locked
+            }
+
+            // Admin is authenticated and not locked
+            const userContextToCache = {
+              user: adminUser,
+              userType: 'admin',
+              permissions: await getUserPermissions({ user: adminUser, userType: 'admin' }),
+              securityContext: {
+                ...req.userContext.securityContext,
+                ...(adminUser.securityProfile || {}),
+                accountLocked: adminUser.roleData.admin.accountLocked,
+                twoFactorEnabled: adminUser.roleData.admin.twoFactorEnabled,
+              },
+            };
+
+            // 4. Populate the request and CACHE the result for next time.
+            req.userContext = { ...req.userContext, ...userContextToCache };
+            await cacheLayer.set(cacheKey, userContextToCache, 5); // Cache for 5 seconds
+
+            userIdentified = true; // Admin user successfully identified
+            // console.log(`🔑 Admin user authenticated by token: ${adminUser.roleData.admin.username}`);
           }
-
-          // Admin is authenticated and not locked
-          req.userContext.user = adminUser;
-          req.userContext.userType = 'admin';
-          // Permissions are dynamically fetched here for the userContext
-          req.userContext.permissions = await getUserPermissions({ // Use the imported getUserPermissions
-            user: adminUser,
-            userType: 'admin'
-          });
-          req.userContext.securityContext = {
-            ...req.userContext.securityContext, // Keep defaults
-            ...adminUser.securityProfile.toObject(), // Override with user's security profile
-            loginAttempts: adminUser.roleData.admin.loginAttempts,
-            accountLocked: adminUser.roleData.admin.accountLocked,
-            lockUntil: adminUser.roleData.admin.lockUntil,
-            lastLogin: adminUser.roleData.admin.lastLogin,
-            twoFactorEnabled: adminUser.roleData.admin.twoFactorEnabled
-          };
-          userIdentified = true; // Admin user successfully identified
-          console.log(`🔑 Admin user authenticated by token: ${adminUser.roleData.admin.username}`);
+        } catch (jwtError) {
+          console.log('❌ Admin token invalid or expired:', jwtError.message);
+          // Token invalid, continue to device fingerprinting or anonymous fallback
         }
-      } catch (jwtError) {
-        console.log('❌ Admin token invalid or expired:', jwtError.message);
-        // Token invalid, continue to device fingerprinting or anonymous fallback
       }
     }
 
@@ -120,7 +134,7 @@ const userTypeDetection = async (req, res, next) => {
       // - No valid admin token was present.
       // - No deviceFingerprintId was provided at all.
       // - A deviceFingerprintId was provided, but no existing DeviceFingerprint document was found.
-      
+
       // For these cases, we establish an in-memory, non-persistent anonymous user context.
       // No new User or DeviceFingerprint documents are created in the database here.
       req.userContext.user = {
@@ -192,12 +206,12 @@ module.exports = {
             if (user.activityProfile.featureUsage[activityType] !== undefined) {
               user.activityProfile.featureUsage[activityType] += 1;
             }
-            
+
             // Add security event for admin activities
             if (req.userContext.userType === 'admin' && ['moderation', 'analytics', 'user_management'].includes(activityType)) {
               user.addSecurityEvent(`admin_${activityType}`, `Admin performed ${activityType}`, 'low');
             }
-            
+
             await user.save();
           }
         }

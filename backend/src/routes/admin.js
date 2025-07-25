@@ -12,6 +12,7 @@ const { requireAdmin, requirePermission } = require('../middleware/roleBasedAcce
 const { cacheLayer, cacheMiddleware } = require('../middleware/cacheLayer'); // Import Redis caching
 const crypto = require('crypto'); // For cache key hashing
 const { performanceMonitor } = require('../utils/performanceMonitor'); // Import performance monitoring
+const { lightSanitization, adminSanitization } = require('../utils/sanitization');
 
 // Apply security middleware to all admin routes
 router.use(userTypeDetection);
@@ -49,6 +50,7 @@ const logAdminAction = async (req, actionType, details = {}, severity = 'low') =
 
 // GET /api/admin/dashboard - Admin dashboard stats
 router.get('/dashboard', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('view_admin_analytics'),
   cacheMiddleware(300, () => {
     // Cache dashboard for 5 minutes - same for all admins
@@ -108,6 +110,7 @@ router.get('/dashboard',
 
 // GET /api/admin/reports/flagged - Get reports with security flags
 router.get('/reports/flagged', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('moderate_content'),
   cacheMiddleware(180, () => {
     // Cache flagged reports for 3 minutes
@@ -146,6 +149,7 @@ router.get('/reports/flagged',
 
 // GET /api/admin/reports - Get reports for moderation queue (alias for /reports/all)
 router.get('/reports', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('view_all_reports'),
   cacheMiddleware(180, (req) => {
     // Cache moderation queue for 3 minutes with pagination
@@ -215,6 +219,7 @@ router.get('/reports',
 
 // GET /api/admin/reports/all - Get all reports for admin dashboard
 router.get('/reports/all', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('view_all_reports'),
   cacheMiddleware(180, (req) => {
     // Cache admin reports for 3 minutes with pagination
@@ -288,7 +293,9 @@ router.get('/reports/all',
 });
 
 // GET /api/admin/verify - Verify admin session for token restoration
-router.get('/verify', requirePermission('admin_access'), async (req, res) => {
+router.get('/verify', 
+  lightSanitization(), // Only sanitize query params
+  requirePermission('admin_access'), async (req, res) => {
   try {
     // If we reach here, the middleware has already verified the token and user
     const user = req.userContext.user;
@@ -322,6 +329,7 @@ router.get('/verify', requirePermission('admin_access'), async (req, res) => {
 
 // GET /api/admin/analytics/security - Security analytics for admin monitoring
 router.get('/analytics/security', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('view_security_analytics'),
   cacheMiddleware(600, () => {
     // Cache security analytics for 10 minutes - same for all admins
@@ -376,6 +384,7 @@ router.get('/analytics/security',
 
 // GET /api/admin/performance/report - Get comprehensive performance report
 router.get('/performance/report', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('view_system_metrics'),
   cacheMiddleware(60, () => {
     // 1 minute cache for performance data
@@ -407,6 +416,7 @@ router.get('/performance/report',
 
 // GET /api/admin/performance/metrics - Get raw metrics for external monitoring
 router.get('/performance/metrics', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('view_system_metrics'),
   cacheMiddleware(30, () => {
     // 30 second cache for raw metrics
@@ -438,6 +448,7 @@ router.get('/performance/metrics',
 
 // GET /api/admin/performance/database - Get database-specific performance data
 router.get('/performance/database', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('view_system_metrics'),
   cacheMiddleware(60, () => {
     // Cache database metrics for 1 minute
@@ -481,6 +492,7 @@ router.get('/performance/database',
 
 // GET /api/admin/performance/cache - Get Redis cache performance data
 router.get('/performance/cache', 
+  lightSanitization(), // Only sanitize query params
   requirePermission('view_system_metrics'),
   cacheMiddleware(30, () => {
     // Cache cache metrics for 30 seconds (meta!)
@@ -519,6 +531,7 @@ router.get('/performance/cache',
 
 // POST /api/admin/performance/reset - Reset performance metrics (admin only)
 router.post('/performance/reset', 
+  adminSanitization(), // Full sanitization with admin-specific logic
   requirePermission('system_configuration'),
   async (req, res) => {
   try {

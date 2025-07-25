@@ -13,6 +13,7 @@ const { requireEmailVerification, requireEmailVerificationForLogin } = require('
 const { loginLimiter, passwordResetLimiter, twoFactorLimiter, refreshLimiter } = require('../middleware/rateLimiter');
 const { userTypeDetection } = require('../middleware/userTypeDetection');
 const { cacheLayer, cacheMiddleware } = require('../middleware/cacheLayer'); // Import Redis caching
+const { lightSanitization, fullSanitization, validationRules, validationErrorHandler } = require('../utils/sanitization');
 
 router.use(userTypeDetection);
 
@@ -39,7 +40,12 @@ const logAuthAction = async (actor, actionType, outcome, details = {}, severity 
 };
 
 // POST /api/auth/admin/login - Enhanced admin login with email verification
-router.post('/admin/login', loginLimiter, async (req, res) => {
+router.post('/admin/login', 
+  loginLimiter, 
+  fullSanitization(), 
+  validationRules.adminLogin,
+  validationErrorHandler(),
+  async (req, res) => {
   try {
     const { username, password, deviceFingerprint } = req.body;
     const actor = { username, ipAddress: req.ip };
@@ -184,7 +190,10 @@ router.post('/admin/login', loginLimiter, async (req, res) => {
 });
 
 // POST /api/auth/admin/2fa/verify-login - Enhanced 2FA verification
-router.post('/admin/2fa/verify-login', twoFactorLimiter, async (req, res) => {
+router.post('/admin/2fa/verify-login', 
+  twoFactorLimiter, 
+  fullSanitization(), 
+  async (req, res) => {
   try {
     const { preAuthToken, twoFaCode } = req.body;
     
@@ -265,7 +274,10 @@ router.post('/admin/2fa/verify-login', twoFactorLimiter, async (req, res) => {
 });
 
 // POST /api/auth/token/refresh - Token refresh endpoint
-router.post('/token/refresh', refreshLimiter, async (req, res) => {
+router.post('/token/refresh', 
+  refreshLimiter, 
+  fullSanitization(), 
+  async (req, res) => {
   try {
     const { refreshToken } = req.body;
     
@@ -293,7 +305,10 @@ router.post('/token/refresh', refreshLimiter, async (req, res) => {
 });
 
 // POST /api/auth/admin/logout - Enhanced logout with token blacklisting
-router.post('/admin/logout', RoleMiddleware.apply(RoleMiddleware.adminOnly), async (req, res) => {
+router.post('/admin/logout', 
+  RoleMiddleware.apply(RoleMiddleware.adminOnly), 
+  lightSanitization(), 
+  async (req, res) => {
   try {
     const { refreshToken } = req.body;
     const accessToken = req.headers.authorization?.replace('Bearer ', '');
@@ -335,7 +350,10 @@ router.post('/admin/logout', RoleMiddleware.apply(RoleMiddleware.adminOnly), asy
 });
 
 // POST /api/auth/admin/unlock/:userId - Admin account unlock mechanism
-router.post('/admin/unlock/:userId', RoleMiddleware.apply(RoleMiddleware.superAdminOnly), async (req, res) => {
+router.post('/admin/unlock/:userId', 
+  RoleMiddleware.apply(RoleMiddleware.superAdminOnly), 
+  fullSanitization(), 
+  async (req, res) => {
   try {
     const { userId } = req.params;
     const { reason } = req.body;
@@ -411,7 +429,10 @@ router.post('/admin/unlock/:userId', RoleMiddleware.apply(RoleMiddleware.superAd
 });
 
 // POST /api/auth/request-password-reset - Enhanced password reset with rate limiting
-router.post('/request-password-reset', passwordResetLimiter, async (req, res) => {
+router.post('/request-password-reset', 
+  passwordResetLimiter, 
+  fullSanitization(), 
+  async (req, res) => {
   try {
     const { email } = req.body;
     const actor = { email, ipAddress: req.ip };
@@ -471,7 +492,9 @@ router.post('/request-password-reset', passwordResetLimiter, async (req, res) =>
 });
 
 // POST /api/auth/reset-password - Password reset completion
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', 
+  fullSanitization(), 
+  async (req, res) => {
   try {
     const { token, password } = req.body;
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
@@ -542,7 +565,9 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // GET /api/auth/verify-email/:token - Email verification
-router.get('/verify-email/:token', async (req, res) => {
+router.get('/verify-email/:token', 
+  lightSanitization(), 
+  async (req, res) => {
   try {
     const { token } = req.params;
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
@@ -588,7 +613,9 @@ router.get('/verify-email/:token', async (req, res) => {
 });
 
 // GET /api/auth/user/context - Enhanced user context with verification status
-router.get('/user/context', async (req, res) => {
+router.get('/user/context', 
+  lightSanitization(), 
+  async (req, res) => {
   try {
     const { userContext } = req;
     
@@ -626,7 +653,10 @@ router.get('/user/context', async (req, res) => {
 });
 
 // GET /api/auth/admin/sessions - Get user's active sessions
-router.get('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly), async (req, res) => {
+router.get('/admin/sessions', 
+  RoleMiddleware.apply(RoleMiddleware.adminOnly), 
+  lightSanitization(), 
+  async (req, res) => {
   try {
     const userId = req.userContext.user._id;
     const sessions = await TokenManager.getUserRefreshTokens(userId);
@@ -650,7 +680,10 @@ router.get('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly), as
 });
 
 // DELETE /api/auth/admin/sessions - Revoke all sessions
-router.delete('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly), async (req, res) => {
+router.delete('/admin/sessions', 
+  RoleMiddleware.apply(RoleMiddleware.adminOnly), 
+  lightSanitization(), 
+  async (req, res) => {
   try {
     const userId = req.userContext.user._id;
     await TokenManager.revokeAllUserTokens(userId);
@@ -683,7 +716,8 @@ router.delete('/admin/sessions', RoleMiddleware.apply(RoleMiddleware.adminOnly),
 
 // GET /api/auth/security/insights - Get security insights for admin dashboard
 router.get('/security/insights', 
-  RoleMiddleware.apply(RoleMiddleware.adminOnly),
+  RoleMiddleware.apply(RoleMiddleware.adminOnly), 
+  lightSanitization(), 
   cacheMiddleware(300, () => {
     // Cache security insights for 5 minutes
     return 'auth:security:insights';
@@ -795,6 +829,7 @@ router.get('/security/insights',
 
 // GET /api/auth/profile - Get user profile with caching
 router.get('/profile',
+  lightSanitization(), 
   cacheMiddleware(600, (req) => {
     // Cache user profiles for 10 minutes per user
     return `auth:profile:${req.userContext.user._id}`;

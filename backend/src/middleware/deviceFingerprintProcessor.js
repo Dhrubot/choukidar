@@ -432,9 +432,9 @@ class DeviceFingerprintProcessor {
       const jobObjects = await cacheLayer.zpopmin(queueKey, batchSize);
       
       const jobs = [];
-      for (let i = 0; i < jobStrings.length; i += 2) {
+      for (let i = 0; i < jobObjects.length; i += 2) {
         try {
-          const jobStr = jobStrings[i];
+          const jobStr = jobObjects[i];
           const job = JSON.parse(jobStr);
           job.processedBy = this.processId;
           job.startedAt = new Date();
@@ -568,6 +568,15 @@ class DeviceFingerprintProcessor {
         throw new Error(`Device not found: ${fingerprintId}`);
       }
 
+      // Check if device still needs detailed analysis (flag-based approach)
+      if (!device.needsDetailedAnalysis) {
+        productionLogger.debug('Device no longer needs detailed analysis, skipping', {
+          fingerprintId,
+          lastAnalysis: device.processingStatus?.lastDetailedAnalysis
+        });
+        return;
+      }
+
       // Skip if device was recently updated (avoid race conditions)
       if (device.updatedAt > job.queuedAt) {
         productionLogger.debug('Device updated since job queued, skipping', {
@@ -580,7 +589,10 @@ class DeviceFingerprintProcessor {
 
       let analysisResults = {};
 
-      switch (analysisType) {
+      // Use analysis priority from pre-save hook if available
+      const effectiveAnalysisType = device.processingStatus?.analysisPriority || analysisType || 'full';
+
+      switch (effectiveAnalysisType) {
         case 'critical':
           analysisResults = await this.performCriticalAnalysis(device);
           break;
@@ -624,7 +636,7 @@ class DeviceFingerprintProcessor {
         if (analysisResults['securityProfile.riskLevel'] === 'critical') {
           productionLogger.security('Critical security analysis completed', {
             fingerprintId,
-            analysisType,
+            analysisType: effectiveAnalysisType,
             results: analysisResults
           });
         }

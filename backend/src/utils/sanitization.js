@@ -547,6 +547,175 @@ class InputSanitizer {
   }
 
   /**
+   * Light sanitization for GET routes (query params only)
+   */
+  lightSanitization() {
+    return (req, res, next) => {
+      try {
+        // Only sanitize query parameters for GET requests
+        if (req.query && typeof req.query === 'object') {
+          for (const [key, value] of Object.entries(req.query)) {
+            if (typeof value === 'string') {
+              req.query[key] = this.sanitizeText(value, { allowHTML: false });
+            }
+          }
+        }
+
+        // Sanitize URL parameters
+        if (req.params && typeof req.params === 'object') {
+          for (const [key, value] of Object.entries(req.params)) {
+            if (typeof value === 'string') {
+              req.params[key] = this.sanitizeText(value, { allowHTML: false });
+            }
+          }
+        }
+
+        next();
+      } catch (error) {
+        console.error('❌ Light sanitization error:', error);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid query parameters'
+        });
+      }
+    };
+  }
+
+  /**
+   * Full sanitization for POST/PUT routes (body + params + query)
+   */
+  fullSanitization() {
+    return (req, res, next) => {
+      try {
+        // Sanitize request body (most important for POST/PUT)
+        if (req.body && typeof req.body === 'object') {
+          req.body = this.sanitizeMongoQuery(req.body);
+        }
+
+        // Sanitize query parameters
+        if (req.query && typeof req.query === 'object') {
+          for (const [key, value] of Object.entries(req.query)) {
+            if (typeof value === 'string') {
+              req.query[key] = this.sanitizeText(value, { allowHTML: false });
+            }
+          }
+        }
+
+        // Sanitize URL parameters
+        if (req.params && typeof req.params === 'object') {
+          for (const [key, value] of Object.entries(req.params)) {
+            if (typeof value === 'string') {
+              req.params[key] = this.sanitizeText(value, { allowHTML: false });
+            }
+          }
+        }
+
+        next();
+      } catch (error) {
+        console.error('❌ Full sanitization error:', error);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid input data',
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      }
+    };
+  }
+
+  /**
+   * Report-specific sanitization (for report submission)
+   */
+  reportSanitization() {
+    return (req, res, next) => {
+      try {
+        if (req.body) {
+          // Sanitize report-specific fields
+          if (req.body.description) {
+            req.body.description = this.sanitizeText(req.body.description, { 
+              allowHTML: false, 
+              maxLength: 1000 
+            });
+          }
+
+          if (req.body.location && req.body.location.address) {
+            req.body.location.address = this.sanitizeText(req.body.location.address, { 
+              allowHTML: false, 
+              maxLength: 200 
+            });
+          }
+
+          // Sanitize coordinates
+          if (req.body.location && req.body.location.coordinates) {
+            const coords = req.body.location.coordinates;
+            if (Array.isArray(coords) && coords.length === 2) {
+              coords[0] = parseFloat(coords[0]); // longitude
+              coords[1] = parseFloat(coords[1]); // latitude
+            }
+          }
+
+          // Remove any MongoDB injection attempts
+          req.body = this.sanitizeMongoQuery(req.body);
+        }
+
+        next();
+      } catch (error) {
+        console.error('❌ Report sanitization error:', error);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid report data'
+        });
+      }
+    };
+  }
+
+  /**
+   * Admin-specific sanitization (for admin operations)
+   */
+  adminSanitization() {
+    return (req, res, next) => {
+      try {
+        // Full sanitization for admin operations
+        if (req.body && typeof req.body === 'object') {
+          req.body = this.sanitizeMongoQuery(req.body);
+          
+          // Additional admin-specific sanitization
+          if (req.body.reason) {
+            req.body.reason = this.sanitizeText(req.body.reason, { 
+              allowHTML: false, 
+              maxLength: 500 
+            });
+          }
+        }
+
+        // Sanitize query and params
+        if (req.query && typeof req.query === 'object') {
+          for (const [key, value] of Object.entries(req.query)) {
+            if (typeof value === 'string') {
+              req.query[key] = this.sanitizeText(value, { allowHTML: false });
+            }
+          }
+        }
+
+        if (req.params && typeof req.params === 'object') {
+          for (const [key, value] of Object.entries(req.params)) {
+            if (typeof value === 'string') {
+              req.params[key] = this.sanitizeText(value, { allowHTML: false });
+            }
+          }
+        }
+
+        next();
+      } catch (error) {
+        console.error('❌ Admin sanitization error:', error);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid admin operation data'
+        });
+      }
+    };
+  }
+
+  /**
    * Express middleware for input sanitization
    */
   sanitizationMiddleware() {
@@ -748,6 +917,10 @@ module.exports = {
   validationErrorHandler: () => inputSanitizer.validationErrorHandler(),
   fileUploadValidation: (type) => inputSanitizer.fileUploadValidation(type),
   securityHeaders: () => inputSanitizer.securityHeaders(),
+  lightSanitization: () => inputSanitizer.lightSanitization(),
+  fullSanitization: () => inputSanitizer.fullSanitization(),
+  reportSanitization: () => inputSanitizer.reportSanitization(),
+  adminSanitization: () => inputSanitizer.adminSanitization(),
   
   // Validation rules
   validationRules: inputSanitizer.generateValidationRules()

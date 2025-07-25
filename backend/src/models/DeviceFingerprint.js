@@ -686,9 +686,7 @@ deviceFingerprintSchema.statics.detectCoordinatedAttack = async function(timeWin
   
   try {
     const cached = await cacheLayer.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
   } catch (error) {
     productionLogger.debug('Coordinated attack cache miss');
   }
@@ -760,9 +758,7 @@ deviceFingerprintSchema.statics.analyzeCorrelatedDevices = async function(finger
   
   try {
     const cached = await cacheLayer.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
   } catch (error) {
     productionLogger.debug('Device correlation cache miss');
   }
@@ -1078,18 +1074,10 @@ deviceFingerprintSchema.pre('save', async function(next) {
                                  this.isModified('deviceSignature.timezone') ||
                                  this.isNew;
 
-    const isLowPriorityUpdate = this.isModified('activityHistory.lastSeen') || 
-                                this.isModified('analytics.totalReports') ||
-                                this.isModified('analytics.sessionCount');
-
-    // Always calculate trust score and threat level for security
+    // Always calculate core scores (fast operations)
     await this.calculateTrustScore();
     this.assessThreatLevel();
-
-    // Check quarantine expiry
     this.checkQuarantineExpiry();
-
-    // Validation history cleanup
     this.cleanupValidationHistory();
 
     // Check for quarantine status change to log history
@@ -1097,127 +1085,41 @@ deviceFingerprintSchema.pre('save', async function(next) {
       this.addQuarantineEvent('Auto-quarantined due to high risk/spam/spoofing', 'auto');
     }
 
-    // ENHANCED ANOMALY SCORING with performance optimization
-    let anomaly = 0;
-
+    // --- LIGHTWEIGHT ANOMALY SCORING (Your Superior Approach) ---
     if (isHighPriorityUpdate) {
-      // Full anomaly calculation for security-critical changes
+      // Perform lightweight, synchronous anomaly calculation
+      let anomaly = this.previousAnomalyScore || 0;
       
-      // Network-based anomaly detection (30% weight)
-      if (this.networkProfile.vpnSuspected) anomaly += 15;
-      if (this.networkProfile.proxyDetected) anomaly += 10;
-      if (this.networkProfile.torDetected) anomaly += 20;
-      if (this.networkProfile.suspiciousHeaders?.length > 0) anomaly += 5;
-
-      // Behavior-based anomaly detection (25% weight)
-      const humanBehaviorScore = this.behaviorProfile.humanBehaviorScore || 50;
-      if (humanBehaviorScore < 20) anomaly += 20;
-      else if (humanBehaviorScore < 40) anomaly += 10;
-      else if (humanBehaviorScore < 60) anomaly += 5;
-
-      const reportingFrequency = this.behaviorProfile.reportingFrequency || 0;
-      const sessionDuration = this.behaviorProfile.sessionDuration || 300;
-      if (reportingFrequency > 10) anomaly += 8;
-      if (sessionDuration < 30) anomaly += 5;
-
-      // Device signature anomaly detection (20% weight)
-      const screenResolution = this.deviceSignature.screenResolution || '';
-      if (screenResolution === '800x600' || screenResolution === '1024x768') {
-        anomaly += 8;
+      // Critical security flags (fast checks)
+      if (this.networkProfile.vpnSuspected || this.networkProfile.proxyDetected || this.networkProfile.torDetected) {
+        anomaly += 20;
       }
-
-      const timezone = this.deviceSignature.timezone || '';
-      if (timezone && !['Asia/Dhaka', 'Asia/Kolkata'].includes(timezone)) {
-        anomaly += 12;
-      }
-
-      const languages = this.deviceSignature.languages || [];
-      if (!languages.includes('bn') && !languages.includes('en')) {
-        anomaly += 8;
-      }
-
-      // Location consistency check (15% weight)
-      if (this.locationProfile.crossBorderActivity) anomaly += 15;
-      const locationJumps = this.locationProfile.locationJumps || 0;
-      const gpsAccuracy = this.locationProfile.gpsAccuracy || 100;
-      if (locationJumps > 3) anomaly += 10;
-      if (gpsAccuracy > 1000) anomaly += 5;
-
-      // Security flags (10% weight)
-      if (this.securityProfile.spamSuspected) anomaly += 8;
-      if (this.securityProfile.spoofingSuspected) anomaly += 12;
-      const flaggedReports = this.securityProfile.flaggedReports || 0;
-      if (flaggedReports > 0) {
-        anomaly += Math.min(10, flaggedReports * 2);
-      }
-
-      // Historical behavior patterns
-      const totalReports = this.analytics.totalReports || 0;
-      const approvedReports = this.analytics.approvedReports || 0;
-      const averageSessionTime = this.analytics.averageSessionTime || 300;
-      
-      if (totalReports > 50 && approvedReports === 0) {
+      if (this.behaviorProfile.humanBehaviorScore < 30) {
         anomaly += 15;
       }
-
-      if (averageSessionTime < 60) {
-        anomaly += 5;
+      if (this.locationProfile.crossBorderActivity) {
+        anomaly += 25;
       }
-
-      // Device consistency checks - FIXED: Properly handle previousSignature
-      if (this.previousSignature) {
-        const deviceChanges = [
-          this.deviceSignature.userAgent !== this.previousSignature.userAgent,
-          this.deviceSignature.screenResolution !== this.previousSignature.screenResolution,
-          this.deviceSignature.timezone !== this.previousSignature.timezone
-        ].filter(Boolean).length;
-
-        if (deviceChanges >= 2) anomaly += 8;
+      if (this.securityProfile.spamSuspected) {
+        anomaly += 10;
       }
-
-      // Cross-device correlation factors
-      if (this.crossDeviceCorrelation.correlationConfidence > 80) {
-        // High correlation with other devices - potential multi-device abuse
-        anomaly += 12;
+      if (this.securityProfile.spoofingSuspected) {
+        anomaly += 15;
       }
-
-      // Apply temporal smoothing to prevent sudden spikes
-      if (this.previousAnomalyScore !== undefined) {
-        const maxChange = 15;
-        const change = anomaly - this.previousAnomalyScore;
-        if (Math.abs(change) > maxChange) {
-          anomaly = this.previousAnomalyScore + (change > 0 ? maxChange : -maxChange);
-        }
-      }
-
-    } else if (isLowPriorityUpdate) {
-      // Lightweight calculation for low-priority updates
-      if (this.networkProfile.torDetected) anomaly += 20;
-      if (this.locationProfile.crossBorderActivity) anomaly += 15;
-      if (this.securityProfile.spoofingSuspected) anomaly += 12;
       
-      // Use cached previous score with minimal adjustment
-      const previousScore = this.previousAnomalyScore || 0;
-      anomaly = Math.max(anomaly, previousScore * 0.95);
-      
-    } else {
-      // Use cached score for non-security updates
-      anomaly = this.previousAnomalyScore || 0;
-    }
+      this.deviceAnomalyScore = Math.min(100, Math.max(0, anomaly));
+      this.previousAnomalyScore = this.deviceAnomalyScore;
 
-    // Cap the anomaly score
-    this.deviceAnomalyScore = Math.min(100, Math.max(0, anomaly));
-    this.previousAnomalyScore = this.deviceAnomalyScore;
-
-    // Queue for background processing if needed
-    if (isHighPriorityUpdate && (this.deviceAnomalyScore > 70 || this.securityProfile.riskLevel === 'critical')) {
+      // Flag for detailed background analysis
       this.needsDetailedAnalysis = true;
-      this.queueForProcessing('critical', 'critical');
-    } else if (this.deviceAnomalyScore > 50) {
-      this.queueForProcessing('high_risk', 'medium');
+      
+      // Set analysis priority based on risk level
+      this.processingStatus.analysisPriority = this.securityProfile.riskLevel === 'critical' ? 'critical' : 
+                                               this.deviceAnomalyScore > 70 ? 'high' : 'normal';
+      this.processingStatus.lastFlaggedForAnalysis = new Date();
     }
 
-    // Set IP hash if not already set (MISSING FUNCTIONALITY 1)
+    // Set IP hash if not already set
     if (!this.networkProfile.ipHash && this.networkProfile.lastKnownIP) {
       this.networkProfile.ipHash = crypto.createHash('sha256')
         .update(this.networkProfile.lastKnownIP)
@@ -1225,39 +1127,9 @@ deviceFingerprintSchema.pre('save', async function(next) {
         .substring(0, 16);
     }
 
-    // Update cross-device correlation data
-    if (this.isModified('deviceSignature') || this.isNew) {
-      // Queue correlation analysis
-      setTimeout(async () => {
-        try {
-          const correlations = await this.constructor.analyzeCorrelatedDevices(this.fingerprintId);
-          if (correlations.length > 0) {
-            await this.constructor.updateOne(
-              { fingerprintId: this.fingerprintId },
-              {
-                $set: {
-                  'crossDeviceCorrelation.relatedDevices': correlations.map(c => c.fingerprintId),
-                  'crossDeviceCorrelation.correlationConfidence': Math.max(...correlations.map(c => c.correlationScore)),
-                  'crossDeviceCorrelation.lastCorrelationUpdate': new Date()
-                }
-              }
-            );
-          }
-        } catch (error) {
-          productionLogger.error('Cross-device correlation update failed', {
-            error: error.message,
-            fingerprintId: this.fingerprintId
-          });
-        }
-      }, 1000); // Async update after save
-    }
-
     next();
   } catch (error) {
-    productionLogger.error('DeviceFingerprint pre-save middleware error', {
-      error: error.message,
-      fingerprintId: this.fingerprintId
-    });
+    console.error('DeviceFingerprint pre-save middleware error:', error);
     next(error);
   }
 });

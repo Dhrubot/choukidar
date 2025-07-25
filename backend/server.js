@@ -70,7 +70,7 @@ if (process.env.NODE_ENV === 'development') {
 
 // SECURITY: Add input sanitization and security headers
 app.use(securityHeaders());
-app.use(sanitizationMiddleware());
+// app.use(sanitizationMiddleware());
 
 // ENHANCED: Security middleware - Apply device fingerprinting and user context to all requests
 app.use(userTypeDetection);
