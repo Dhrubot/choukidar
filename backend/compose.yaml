@@ -1,0 +1,409 @@
+# === docker-compose.production.yml ===
+# Production Docker Compose for SafeStreets Bangladesh
+# Handles 8000+ concurrent users with horizontal scaling
+
+version: '3.8'
+
+services:
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: safestreets-lb
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - nginx-cache:/var/cache/nginx
+    depends_on:
+      - app1
+      - app2
+      - app3
+      - app4
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node.js Application Instances (4 instances for load distribution)
+  app1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    container_name: safestreets-app1
+    environment:
+      - NODE_ENV=production
+      - SERVER_ID=app1
+      - PORT=5001
+      - MONGODB_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/safestreets?replicaSet=rs0
+      - REDIS_URL=redis://redis-master:6379
+      - REDIS_CLUSTER_MODE=false
+      - WORKER_ID=1
+    depends_on:
+      - mongo1
+      - redis-master
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  app2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    container_name: safestreets-app2
+    environment:
+      - NODE_ENV=production
+      - SERVER_ID=app2
+      - PORT=5002
+      - MONGODB_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/safestreets?replicaSet=rs0
+      - REDIS_URL=redis://redis-master:6379
+      - REDIS_CLUSTER_MODE=false
+      - WORKER_ID=2
+    depends_on:
+      - mongo1
+      - redis-master
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  app3:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    container_name: safestreets-app3
+    environment:
+      - NODE_ENV=production
+      - SERVER_ID=app3
+      - PORT=5003
+      - MONGODB_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/safestreets?replicaSet=rs0
+      - REDIS_URL=redis://redis-master:6379
+      - REDIS_CLUSTER_MODE=false
+      - WORKER_ID=3
+    depends_on:
+      - mongo2
+      - redis-slave1
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  app4:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    container_name: safestreets-app4
+    environment:
+      - NODE_ENV=production
+      - SERVER_ID=app4
+      - PORT=5004
+      - MONGODB_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/safestreets?replicaSet=rs0
+      - REDIS_URL=redis://redis-master:6379
+      - REDIS_CLUSTER_MODE=false
+      - WORKER_ID=4
+    depends_on:
+      - mongo3
+      - redis-slave2
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # MongoDB Replica Set
+  mongo1:
+    image: mongo:7.0
+    container_name: safestreets-mongo1
+    command: mongod --replSet rs0 --bind_ip_all --wiredTigerCacheSizeGB 2
+    volumes:
+      - mongo1-data:/data/db
+      - mongo1-config:/data/configdb
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  mongo2:
+    image: mongo:7.0
+    container_name: safestreets-mongo2
+    command: mongod --replSet rs0 --bind_ip_all --wiredTigerCacheSizeGB 2
+    volumes:
+      - mongo2-data:/data/db
+      - mongo2-config:/data/configdb
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  mongo3:
+    image: mongo:7.0
+    container_name: safestreets-mongo3
+    command: mongod --replSet rs0 --bind_ip_all --wiredTigerCacheSizeGB 2
+    volumes:
+      - mongo3-data:/data/db
+      - mongo3-config:/data/configdb
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # MongoDB Replica Set Initializer
+  mongo-init:
+    image: mongo:7.0
+    container_name: safestreets-mongo-init
+    depends_on:
+      - mongo1
+      - mongo2
+      - mongo3
+    networks:
+      - safestreets-network
+    command: >
+      bash -c "
+        sleep 10 &&
+        mongosh --host mongo1:27017 --eval '
+          rs.initiate({
+            _id: \"rs0\",
+            members: [
+              { _id: 0, host: \"mongo1:27017\", priority: 2 },
+              { _id: 1, host: \"mongo2:27017\", priority: 1 },
+              { _id: 2, host: \"mongo3:27017\", priority: 1 }
+            ]
+          })
+        '
+      "
+    restart: "no"
+
+  # Redis Master-Slave Configuration
+  redis-master:
+    image: redis:7-alpine
+    container_name: safestreets-redis-master
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-master-data:/data
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  redis-slave1:
+    image: redis:7-alpine
+    container_name: safestreets-redis-slave1
+    command: redis-server --appendonly yes --replicaof redis-master 6379 --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-slave1-data:/data
+    depends_on:
+      - redis-master
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  redis-slave2:
+    image: redis:7-alpine
+    container_name: safestreets-redis-slave2
+    command: redis-server --appendonly yes --replicaof redis-master 6379 --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-slave2-data:/data
+    depends_on:
+      - redis-master
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # Redis Sentinel for High Availability
+  redis-sentinel1:
+    image: redis:7-alpine
+    container_name: safestreets-redis-sentinel1
+    command: redis-sentinel /etc/redis-sentinel/sentinel.conf
+    volumes:
+      - ./redis-sentinel.conf:/etc/redis-sentinel/sentinel.conf
+    depends_on:
+      - redis-master
+      - redis-slave1
+      - redis-slave2
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: safestreets-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: safestreets-grafana
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=safestreets_secure_password
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+
+  # Log Aggregation
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: safestreets-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: safestreets-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+
+  # Backup Service
+  backup:
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    container_name: safestreets-backup
+    environment:
+      - MONGODB_URI=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/safestreets?replicaSet=rs0
+      - S3_BUCKET=safestreets-backups
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - backup-data:/backup
+    networks:
+      - safestreets-network
+    restart: unless-stopped
+
+networks:
+  safestreets-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  nginx-cache:
+  mongo1-data:
+  mongo1-config:
+  mongo2-data:
+  mongo2-config:
+  mongo3-data:
+  mongo3-config:
+  redis-master-data:
+  redis-slave1-data:
+  redis-slave2-data:
+  prometheus-data:
+  grafana-data:
+  elasticsearch-data:
+  backup-data:

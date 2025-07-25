@@ -831,11 +831,26 @@ router.get('/security/insights',
 router.get('/profile',
   lightSanitization(), 
   cacheMiddleware(600, (req) => {
-    // Cache user profiles for 10 minutes per user
+    // CRITICAL FIX: Check if user exists before accessing _id
+    if (!req.userContext.user || !req.userContext.user._id) {
+      return `auth:profile:anonymous:${req.userContext.deviceFingerprint?.fingerprintId || 'unknown'}`;
+    }
     return `auth:profile:${req.userContext.user._id}`;
   }, 'auth'),
   async (req, res) => {
   try {
+    // CRITICAL FIX: Handle anonymous users properly
+    if (!req.userContext.user || !req.userContext.user._id) {
+      return res.json({
+        success: true,
+        user: null,
+        userType: req.userContext.userType,
+        isAuthenticated: false,
+        permissions: req.userContext.permissions,
+        securityContext: req.userContext.securityContext
+      });
+    }
+
     const user = await User.findById(req.userContext.user._id)
       .select('-password -refreshTokens');
 
