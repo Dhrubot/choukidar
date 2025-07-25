@@ -11,7 +11,6 @@ const { productionLogger, requestLogger, errorLogger, securityLogger } = require
 const { sanitizationMiddleware, securityHeaders } = require('./src/utils/sanitization');
 const { initializeCache } = require('./src/middleware/cacheLayer');
 const { initializePerformanceTracking, trackApiPerformance, addPerformanceHeaders } = require('./src/middleware/performanceTracking');
-const { optimizeDatabase } = require('./src/models/optimizedIndexes');
 const { optimizeMongoDB } = require('./src/config/mongodbOptimizations');
 require('dotenv').config();
 

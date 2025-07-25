@@ -1,0 +1,562 @@
+{
+  "timestamp": "2025-07-25T19:48:07.813Z",
+  "database": {
+    "collections": {
+      "users": {
+        "documentCount": 955,
+        "avgDocumentSize": 1613,
+        "totalSize": 1540731,
+        "indexCount": 6,
+        "indexSize": 286720,
+        "indexSizeRatio": "18.61%"
+      },
+      "reports": {
+        "documentCount": 954,
+        "avgDocumentSize": 1579,
+        "totalSize": 1506671,
+        "indexCount": 11,
+        "indexSize": 524288,
+        "indexSizeRatio": "34.80%"
+      },
+      "safezones": {
+        "documentCount": 0,
+        "avgDocumentSize": 0,
+        "totalSize": 0,
+        "indexCount": 6,
+        "indexSize": 24576,
+        "indexSizeRatio": "0%"
+      },
+      "devicefingerprints": {
+        "documentCount": 1336,
+        "avgDocumentSize": 2901,
+        "totalSize": 3876725,
+        "indexCount": 6,
+        "indexSize": 385024,
+        "indexSizeRatio": "9.93%"
+      },
+      "auditlogs": {
+        "documentCount": 72252,
+        "avgDocumentSize": 320,
+        "totalSize": 23131683,
+        "indexCount": 6,
+        "indexSize": 7553024,
+        "indexSizeRatio": "32.65%"
+      }
+    },
+    "indexes": {
+      "users": {
+        "total": 6,
+        "indexes": [
+          {
+            "name": "_id_",
+            "keys": [
+              "_id"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": false,
+            "size": "unknown"
+          },
+          {
+            "name": "user_primary_lookup",
+            "keys": [
+              "userType",
+              "securityProfile.securityRiskLevel",
+              "activityProfile.lastSeen"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "admin_operations",
+            "keys": [
+              "roleData.admin.username",
+              "roleData.admin.email"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "security_monitoring",
+            "keys": [
+              "securityProfile.quarantineStatus",
+              "securityProfile.overallTrustScore",
+              "securityProfile.primaryDeviceFingerprint"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "userId_1",
+            "keys": [
+              "userId"
+            ],
+            "unique": true,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "userType_1",
+            "keys": [
+              "userType"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          }
+        ],
+        "redundant": [],
+        "efficiency": 100
+      },
+      "reports": {
+        "total": 11,
+        "indexes": [
+          {
+            "name": "_id_",
+            "keys": [
+              "_id"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": false,
+            "size": "unknown"
+          },
+          {
+            "name": "report_moderation_queue",
+            "keys": [
+              "status",
+              "moderation.priorityLevel",
+              "timestamp"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "location_queries",
+            "keys": [
+              "location.coordinates",
+              "status",
+              "type"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "analytics_queries",
+            "keys": [
+              "type",
+              "severity",
+              "timestamp",
+              "status"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "security_flags",
+            "keys": [
+              "securityFlags.potentialSpam",
+              "securityFlags.crossBorderReport",
+              "securityScore"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "type_1",
+            "keys": [
+              "type"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "location.withinBangladesh_1",
+            "keys": [
+              "location.withinBangladesh"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "timestamp_1",
+            "keys": [
+              "timestamp"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "status_1",
+            "keys": [
+              "status"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "submittedBy.deviceFingerprint_1",
+            "keys": [
+              "submittedBy.deviceFingerprint"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "genderSensitive_1",
+            "keys": [
+              "genderSensitive"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          }
+        ],
+        "redundant": [],
+        "efficiency": 97
+      },
+      "safezones": {
+        "total": 6,
+        "indexes": [
+          {
+            "name": "_id_",
+            "keys": [
+              "_id"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": false,
+            "size": "unknown"
+          },
+          {
+            "name": "safezone_primary",
+            "keys": [
+              "status",
+              "zoneType",
+              "safetyScore"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "location_lookup",
+            "keys": [
+              "location.coordinates",
+              "status",
+              "radius"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "female_safety",
+            "keys": [
+              "femaleSafety.overallFemaleSafety",
+              "femaleSafety.culturallyAppropriate",
+              "status"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "time_based_safety",
+            "keys": [
+              "timeOfDaySafety.morning",
+              "lastSafetyUpdate",
+              "status"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "community_features",
+            "keys": [
+              "category",
+              "communityRating.totalRatings",
+              "communityRating.lastUpdated"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          }
+        ],
+        "redundant": [],
+        "efficiency": 100
+      },
+      "devicefingerprints": {
+        "total": 6,
+        "indexes": [
+          {
+            "name": "_id_",
+            "keys": [
+              "_id"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": false,
+            "size": "unknown"
+          },
+          {
+            "name": "fingerprint_primary",
+            "keys": [
+              "fingerprintId"
+            ],
+            "unique": true,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "security_analysis",
+            "keys": [
+              "securityProfile.riskLevel",
+              "securityProfile.trustScore",
+              "activityHistory.lastSeen"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "user_device_lookup",
+            "keys": [
+              "userId",
+              "activityHistory.lastSeen"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "threat_detection",
+            "keys": [
+              "threatIntelligence.threatConfidence",
+              "networkProfile.vpnSuspected",
+              "networkProfile.proxyDetected"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "userId_1",
+            "keys": [
+              "userId"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          }
+        ],
+        "redundant": [],
+        "efficiency": 100
+      },
+      "auditlogs": {
+        "total": 6,
+        "indexes": [
+          {
+            "name": "_id_",
+            "keys": [
+              "_id"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": false,
+            "size": "unknown"
+          },
+          {
+            "name": "audit_primary",
+            "keys": [
+              "timestamp",
+              "actionType",
+              "severity"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "actor_tracking",
+            "keys": [
+              "actor.userId",
+              "actor.userType",
+              "timestamp"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "outcome_analysis",
+            "keys": [
+              "outcome",
+              "actionType",
+              "timestamp"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "actor.userId_1",
+            "keys": [
+              "actor.userId"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "timestamp_1",
+            "keys": [
+              "timestamp"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          }
+        ],
+        "redundant": [],
+        "efficiency": 100
+      }
+    },
+    "connectionPool": {
+      "connectionState": "connected",
+      "currentConnections": 22,
+      "availableConnections": 51178,
+      "totalCreated": 8514,
+      "maxPoolSize": 100,
+      "minPoolSize": 10,
+      "socketTimeout": 45000,
+      "serverSelectionTimeout": 5000
+    },
+    "queryPerformance": {
+      "testResults": [
+        {
+          "name": "pending_reports",
+          "collection": "reports",
+          "executionTime": 4,
+          "resultCount": 10,
+          "performance": "excellent"
+        },
+        {
+          "name": "location_reports",
+          "collection": "reports",
+          "executionTime": 1,
+          "resultCount": 0,
+          "performance": "excellent"
+        },
+        {
+          "name": "active_safezones",
+          "collection": "safezones",
+          "executionTime": 1,
+          "resultCount": 0,
+          "performance": "excellent"
+        },
+        {
+          "name": "admin_users",
+          "collection": "users",
+          "executionTime": 1,
+          "resultCount": 1,
+          "performance": "excellent"
+        },
+        {
+          "name": "high_risk_devices",
+          "collection": "devicefingerprints",
+          "executionTime": 0,
+          "resultCount": 0,
+          "performance": "excellent"
+        }
+      ],
+      "avgQueryTime": 1.4,
+      "slowQueries": []
+    },
+    "avgQueryTime": 1.4,
+    "slowQueries": []
+  },
+  "middleware": {
+    "stackAnalysis": [],
+    "averageOverhead": 0,
+    "heaviestMiddleware": []
+  },
+  "cache": {
+    "status": "available_but_not_initialized",
+    "error": "CacheLayer not initialized",
+    "hitRate": "0%",
+    "recommendation": "Redis server is running but cacheLayer is not initialized in the app"
+  },
+  "routes": {
+    "slowestEndpoints": [],
+    "errorProneRoutes": [],
+    "highTrafficRoutes": []
+  },
+  "memory": {
+    "heapUsed": 34.2,
+    "heapTotal": 59.91,
+    "external": 19.53,
+    "arrayBuffers": 17.43,
+    "rss": 95.56
+  },
+  "recommendations": [
+    {
+      "priority": "high",
+      "category": "database",
+      "collection": "reports",
+      "issue": "Too many indexes (11)",
+      "recommendation": "Optimize indexes, remove redundant ones",
+      "expectedImprovement": "40-60% write performance gain"
+    },
+    {
+      "priority": "medium",
+      "category": "cache",
+      "issue": "Low cache hit rate (0%)",
+      "recommendation": "Optimize cache strategy and TTL values",
+      "expectedImprovement": "30-50% cache efficiency gain"
+    }
+  ]
+}

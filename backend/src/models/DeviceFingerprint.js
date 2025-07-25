@@ -1185,22 +1185,22 @@ deviceFingerprintSchema.post('save', async function(doc) {
 // ========================================
 
 // Compound indexes for common queries
-deviceFingerprintSchema.index({ 'securityProfile.riskLevel': 1, 'activityHistory.lastSeen': -1 });
-deviceFingerprintSchema.index({ 'networkProfile.ipHash': 1, 'activityHistory.lastSeen': -1 });
-deviceFingerprintSchema.index({ 'deviceAnomalyScore': -1, 'securityProfile.trustScore': 1 });
-deviceFingerprintSchema.index({ 'threatIntelligence.threatConfidence': -1 });
-deviceFingerprintSchema.index({ 'bangladeshProfile.crossBorderSuspicion': -1 });
-deviceFingerprintSchema.index({ 'processingStatus.nextScheduledAnalysis': 1 });
+// deviceFingerprintSchema.index({ 'securityProfile.riskLevel': 1, 'activityHistory.lastSeen': -1 });
+// deviceFingerprintSchema.index({ 'networkProfile.ipHash': 1, 'activityHistory.lastSeen': -1 });
+// deviceFingerprintSchema.index({ 'deviceAnomalyScore': -1, 'securityProfile.trustScore': 1 });
+// deviceFingerprintSchema.index({ 'threatIntelligence.threatConfidence': -1 });
+// deviceFingerprintSchema.index({ 'bangladeshProfile.crossBorderSuspicion': -1 });
+// deviceFingerprintSchema.index({ 'processingStatus.nextScheduledAnalysis': 1 });
 
-// Geospatial index for location-based queries
-deviceFingerprintSchema.index({ 'locationProfile.lastKnownLocation.coordinates': '2dsphere' });
+// // Geospatial index for location-based queries
+// deviceFingerprintSchema.index({ 'locationProfile.lastKnownLocation.coordinates': '2dsphere' });
 
-// Text index for searching device characteristics
-deviceFingerprintSchema.index({
-  'deviceSignature.userAgent': 'text',
-  'networkProfile.networkProvider': 'text',
-  'locationProfile.lastKnownLocation.address': 'text'
-});
+// // Text index for searching device characteristics
+// deviceFingerprintSchema.index({
+//   'deviceSignature.userAgent': 'text',
+//   'networkProfile.networkProvider': 'text',
+//   'locationProfile.lastKnownLocation.address': 'text'
+// });
 
 // ========================================
 // VIRTUAL FIELDS
