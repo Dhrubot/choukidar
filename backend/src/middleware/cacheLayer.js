@@ -107,6 +107,7 @@ class CacheLayer {
       // Test connection
       await this.client.ping();
       console.log('✅ Enhanced Redis cache layer initialized successfully');
+      this.isInitialized = true;
 
       return true;
     } catch (error) {
@@ -857,13 +858,13 @@ class CacheLayer {
    */
   async bumpVersion(namespace) {
     if (!this.isConnected) return 1;
-  
+
     try {
       const key = this.generateKey('version', namespace);
-      
+
       // Check if the key exists and validate its value
       const currentValue = await this.client.get(key);
-      
+
       if (currentValue !== null) {
         // Check if the current value is a valid integer
         const parsedValue = parseInt(currentValue, 10);
@@ -876,15 +877,15 @@ class CacheLayer {
           return newVersion;
         }
       }
-      
+
       // If key doesn't exist or has valid integer, proceed with increment
       const newVersion = await this.client.incr(key);
       console.log(`📈 Bumped version for namespace '${namespace}' to ${newVersion}`);
       return newVersion;
-      
+
     } catch (error) {
       console.error(`❌ Error bumping version for namespace ${namespace}:`, error);
-      
+
       // Fallback: try to reset the key
       try {
         const key = this.generateKey('version', namespace);
@@ -1210,9 +1211,22 @@ class CacheLayer {
 
     for (const streamKey of streamKeys) {
       try {
-        // Remove expired events based on timestamp
-        const cutoffScore = Date.now() - this.config.realtimeEventTTL * 1000;
-        await this.zRemRangeByScore(streamKey, '-inf', cutoffScore);
+        // FIXED: Check Redis key type before attempting sorted set operations
+        const keyType = await this.client.type(streamKey);
+
+        if (keyType === 'zset') {
+          // Only perform sorted set operations on actual sorted sets
+          const cutoffScore = Date.now() - this.config.realtimeEventTTL * 1000;
+          await this.zRemRangeByScore(streamKey, '-inf', cutoffScore);
+        } else if (keyType !== 'none') {
+          // For other data types, check if they're expired and delete if needed
+          const ttl = await this.client.ttl(streamKey);
+          if (ttl === -1) {
+            // Key exists but has no expiration, set one
+            await this.client.expire(streamKey, this.config.realtimeEventTTL);
+          }
+        }
+
       } catch (error) {
         console.error(`❌ Error cleaning up stream ${streamKey}:`, error);
       }
@@ -1413,16 +1427,16 @@ const cacheMiddleware = (ttl = 300, keyGenerator = null, versionNamespace = null
     // 2. Append the version number if a namespace is provided
     let versionedKey = baseKey;
     let versionNumber = 1;
-    
+
     if (versionNamespace) {
       const versionKey = cacheLayer.generateKey('version', versionNamespace);
       const rawVersion = await cacheLayer.client.get(versionKey);
-      
+
       if (rawVersion !== null) {
         const parsed = parseInt(rawVersion, 10);
         versionNumber = isNaN(parsed) ? 1 : parsed;
       }
-      
+
       // Use just the number, not "v{number}"
       versionedKey = `${baseKey}:${versionNumber}`;
     }

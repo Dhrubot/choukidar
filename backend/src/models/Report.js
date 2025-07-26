@@ -27,7 +27,6 @@ const reportSchema = new mongoose.Schema({
       'domestic_incident',   // Family/domestic related (anonymous)
       'unsafe_area_women'    // Areas unsafe specifically for women
     ],
-    index: true
   },
   
   description: {
@@ -45,7 +44,7 @@ const reportSchema = new mongoose.Schema({
     accuracy: Number,
     obfuscated: { type: Boolean, default: false },
     originalCoordinates: { type: [Number], select: false }, // Hidden by default, admin only
-    withinBangladesh: { type: Boolean, default: true, index: true },
+    withinBangladesh: { type: Boolean, default: true },
     
     // Enhanced location context for female safety (RESTORED)
     locationContext: {
@@ -64,7 +63,6 @@ const reportSchema = new mongoose.Schema({
     required: true,
     min: 1,
     max: 5,
-    index: true
   },
   
   media: [{
@@ -93,7 +91,6 @@ const reportSchema = new mongoose.Schema({
     type: String,
     enum: ['pending', 'approved', 'rejected', 'flagged', 'under_review', 'archived', 'verified'],
     default: 'pending',
-    index: true
   },
   
   moderatedAt: Date,
@@ -111,7 +108,6 @@ const reportSchema = new mongoose.Schema({
       ];
       return femaleIncidentTypes.includes(this.type);
     },
-    index: true
   },
   
   timeOfDayRisk: {

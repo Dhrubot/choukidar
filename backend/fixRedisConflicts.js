@@ -22,7 +22,7 @@ class RedisConflictFixer {
    */
   async initialize() {
     console.log('🚀 Redis Conflict Fixer for SafeStreets Bangladesh');
-    console.log('=' * 60);
+    console.log('='.repeat(60));
     console.log('🎯 Target: Fix "ERR value is not an integer" errors');
     console.log('🔧 Strategy: Clean conflicting rate limit keys\n');
 
@@ -272,7 +272,7 @@ class RedisConflictFixer {
    */
   displayReport() {
     console.log('\n🎯 REDIS CLEANUP REPORT');
-    console.log('=' * 40);
+    console.log('='.repeat(40));
     console.log(`📊 Keys Found: ${this.cleanupStats.keysFound}`);
     console.log(`🗑️  Keys Deleted: ${this.cleanupStats.keysDeleted}`);
     console.log(`❌ Errors: ${this.cleanupStats.errors}`);
@@ -303,7 +303,7 @@ class RedisConflictFixer {
   async cleanup() {
     if (this.client) {
       try {
-        await this.client.disconnect();
+        await this.client.quit();
         console.log('\n✅ Disconnected from Redis');
       } catch (error) {
         console.error('❌ Error disconnecting from Redis:', error);

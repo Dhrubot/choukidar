@@ -1,22 +1,22 @@
 {
-  "timestamp": "2025-07-26T06:24:49.310Z",
+  "timestamp": "2025-07-26T16:39:05.618Z",
   "database": {
     "collections": {
       "users": {
-        "documentCount": 1,
-        "avgDocumentSize": 2100,
-        "totalSize": 2100,
-        "indexCount": 6,
-        "indexSize": 626688,
-        "indexSizeRatio": "29842.29%"
+        "documentCount": 1322,
+        "avgDocumentSize": 1613,
+        "totalSize": 2132577,
+        "indexCount": 4,
+        "indexSize": 176128,
+        "indexSizeRatio": "8.26%"
       },
       "reports": {
-        "documentCount": 0,
-        "avgDocumentSize": 0,
-        "totalSize": 0,
-        "indexCount": 19,
-        "indexSize": 1933312,
-        "indexSizeRatio": "0%"
+        "documentCount": 1321,
+        "avgDocumentSize": 2463,
+        "totalSize": 3254141,
+        "indexCount": 5,
+        "indexSize": 217088,
+        "indexSizeRatio": "6.67%"
       },
       "safezones": {
         "documentCount": 0,
@@ -27,25 +27,25 @@
         "indexSizeRatio": "0%"
       },
       "devicefingerprints": {
-        "documentCount": 382,
-        "avgDocumentSize": 2249,
-        "totalSize": 859394,
-        "indexCount": 14,
-        "indexSize": 1183744,
-        "indexSizeRatio": "137.74%"
+        "documentCount": 1703,
+        "avgDocumentSize": 2957,
+        "totalSize": 5037421,
+        "indexCount": 5,
+        "indexSize": 262144,
+        "indexSizeRatio": "5.20%"
       },
       "auditlogs": {
-        "documentCount": 72367,
+        "documentCount": 72417,
         "avgDocumentSize": 320,
-        "totalSize": 23168734,
-        "indexCount": 6,
-        "indexSize": 7544832,
-        "indexSizeRatio": "32.56%"
+        "totalSize": 23184857,
+        "indexCount": 4,
+        "indexSize": 6340608,
+        "indexSizeRatio": "27.35%"
       }
     },
     "indexes": {
       "users": {
-        "total": 6,
+        "total": 4,
         "indexes": [
           {
             "name": "_id_",
@@ -91,33 +91,13 @@
             "sparse": false,
             "background": true,
             "size": "unknown"
-          },
-          {
-            "name": "userId_1",
-            "keys": [
-              "userId"
-            ],
-            "unique": true,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "userType_1",
-            "keys": [
-              "userType"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
           }
         ],
         "redundant": [],
         "efficiency": 100
       },
       "reports": {
-        "total": 19,
+        "total": 5,
         "indexes": [
           {
             "name": "_id_",
@@ -177,166 +157,10 @@
             "sparse": true,
             "background": true,
             "size": "unknown"
-          },
-          {
-            "name": "type_1",
-            "keys": [
-              "type"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "location.withinBangladesh_1",
-            "keys": [
-              "location.withinBangladesh"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "timestamp_1",
-            "keys": [
-              "timestamp"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "status_1",
-            "keys": [
-              "status"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "submittedBy.deviceFingerprint_1",
-            "keys": [
-              "submittedBy.deviceFingerprint"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "genderSensitive_1",
-            "keys": [
-              "genderSensitive"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "location.coordinates_2dsphere",
-            "keys": [
-              "location.coordinates"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "severity_1",
-            "keys": [
-              "severity"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "submittedBy.userId_1",
-            "keys": [
-              "submittedBy.userId"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "deduplication.contentHash_1",
-            "keys": [
-              "deduplication.contentHash"
-            ],
-            "unique": false,
-            "sparse": true,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "deduplication.temporalHash_1",
-            "keys": [
-              "deduplication.temporalHash"
-            ],
-            "unique": false,
-            "sparse": true,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "processingStatus.isProcessing_1_processingStatus.allPhasesCompleted_1_createdAt_1",
-            "keys": [
-              "processingStatus.isProcessing",
-              "processingStatus.allPhasesCompleted",
-              "createdAt"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "genderSensitive_1_communityValidation.requiresFemaleValidators_1_status_1",
-            "keys": [
-              "genderSensitive",
-              "communityValidation.requiresFemaleValidators",
-              "status"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "deduplication.contentHash_1_createdAt_1",
-            "keys": [
-              "deduplication.contentHash",
-              "createdAt"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
           }
         ],
-        "redundant": [
-          {
-            "redundant": "genderSensitive_1",
-            "supersededBy": "genderSensitive_1_communityValidation.requiresFemaleValidators_1_status_1",
-            "reason": "Subset of compound index"
-          },
-          {
-            "redundant": "deduplication.contentHash_1",
-            "supersededBy": "deduplication.contentHash_1_createdAt_1",
-            "reason": "Subset of compound index"
-          }
-        ],
-        "efficiency": 48
+        "redundant": [],
+        "efficiency": 100
       },
       "safezones": {
         "total": 6,
@@ -416,7 +240,7 @@
         "efficiency": 100
       },
       "devicefingerprints": {
-        "total": 14,
+        "total": 5,
         "indexes": [
           {
             "name": "_id_",
@@ -472,107 +296,13 @@
             "sparse": false,
             "background": true,
             "size": "unknown"
-          },
-          {
-            "name": "userId_1",
-            "keys": [
-              "userId"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "securityProfile.riskLevel_1_activityHistory.lastSeen_-1",
-            "keys": [
-              "securityProfile.riskLevel",
-              "activityHistory.lastSeen"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "networkProfile.ipHash_1_activityHistory.lastSeen_-1",
-            "keys": [
-              "networkProfile.ipHash",
-              "activityHistory.lastSeen"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "deviceAnomalyScore_-1_securityProfile.trustScore_1",
-            "keys": [
-              "deviceAnomalyScore",
-              "securityProfile.trustScore"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "threatIntelligence.threatConfidence_-1",
-            "keys": [
-              "threatIntelligence.threatConfidence"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "bangladeshProfile.crossBorderSuspicion_-1",
-            "keys": [
-              "bangladeshProfile.crossBorderSuspicion"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "processingStatus.nextScheduledAnalysis_1",
-            "keys": [
-              "processingStatus.nextScheduledAnalysis"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "locationProfile.lastKnownLocation.coordinates_2dsphere",
-            "keys": [
-              "locationProfile.lastKnownLocation.coordinates"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "deviceSignature.userAgent_text_networkProfile.networkProvider_text_locationProfile.lastKnownLocation.address_text",
-            "keys": [
-              "_fts",
-              "_ftsx"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
           }
         ],
         "redundant": [],
-        "efficiency": 88
+        "efficiency": 100
       },
       "auditlogs": {
-        "total": 6,
+        "total": 4,
         "indexes": [
           {
             "name": "_id_",
@@ -619,26 +349,6 @@
             "sparse": false,
             "background": true,
             "size": "unknown"
-          },
-          {
-            "name": "actor.userId_1",
-            "keys": [
-              "actor.userId"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
-          },
-          {
-            "name": "timestamp_1",
-            "keys": [
-              "timestamp"
-            ],
-            "unique": false,
-            "sparse": false,
-            "background": true,
-            "size": "unknown"
           }
         ],
         "redundant": [],
@@ -647,9 +357,9 @@
     },
     "connectionPool": {
       "connectionState": "connected",
-      "currentConnections": 22,
-      "availableConnections": 51178,
-      "totalCreated": 9274,
+      "currentConnections": 36,
+      "availableConnections": 51164,
+      "totalCreated": 9820,
       "maxPoolSize": 100,
       "minPoolSize": 10,
       "socketTimeout": 45000,
@@ -660,43 +370,43 @@
         {
           "name": "pending_reports",
           "collection": "reports",
-          "executionTime": 14,
-          "resultCount": 0,
+          "executionTime": 4,
+          "resultCount": 10,
           "performance": "excellent"
         },
         {
           "name": "location_reports",
           "collection": "reports",
-          "executionTime": 10,
+          "executionTime": 2,
           "resultCount": 0,
           "performance": "excellent"
         },
         {
           "name": "active_safezones",
           "collection": "safezones",
-          "executionTime": 1,
+          "executionTime": 0,
           "resultCount": 0,
           "performance": "excellent"
         },
         {
           "name": "admin_users",
           "collection": "users",
-          "executionTime": 2,
+          "executionTime": 0,
           "resultCount": 1,
           "performance": "excellent"
         },
         {
           "name": "high_risk_devices",
           "collection": "devicefingerprints",
-          "executionTime": 5,
+          "executionTime": 0,
           "resultCount": 0,
           "performance": "excellent"
         }
       ],
-      "avgQueryTime": 6.4,
+      "avgQueryTime": 1.2,
       "slowQueries": []
     },
-    "avgQueryTime": 6.4,
+    "avgQueryTime": 1.2,
     "slowQueries": []
   },
   "middleware": {
@@ -705,10 +415,14 @@
     "heaviestMiddleware": []
   },
   "cache": {
-    "status": "available_but_not_initialized",
-    "error": "CacheLayer not initialized",
+    "status": "connected",
     "hitRate": "0%",
-    "recommendation": "Redis server is running but cacheLayer is not initialized in the app"
+    "hits": 0,
+    "misses": 0,
+    "sets": 0,
+    "deletes": 0,
+    "memoryUsage": "1.82M",
+    "latency": "1ms"
   },
   "routes": {
     "slowestEndpoints": [],
@@ -716,45 +430,13 @@
     "highTrafficRoutes": []
   },
   "memory": {
-    "heapUsed": 34.45,
-    "heapTotal": 59.16,
+    "heapUsed": 20.15,
+    "heapTotal": 57.16,
     "external": 19.53,
-    "arrayBuffers": 17.43,
-    "rss": 94.93
+    "arrayBuffers": 17.44,
+    "rss": 94.62
   },
   "recommendations": [
-    {
-      "priority": "medium",
-      "category": "database",
-      "collection": "users",
-      "issue": "High index size ratio (29842.29%)",
-      "recommendation": "Review index efficiency, consider compound indexes",
-      "expectedImprovement": "20-30% storage reduction"
-    },
-    {
-      "priority": "high",
-      "category": "database",
-      "collection": "reports",
-      "issue": "Too many indexes (19)",
-      "recommendation": "Optimize indexes, remove redundant ones",
-      "expectedImprovement": "40-60% write performance gain"
-    },
-    {
-      "priority": "high",
-      "category": "database",
-      "collection": "devicefingerprints",
-      "issue": "Too many indexes (14)",
-      "recommendation": "Optimize indexes, remove redundant ones",
-      "expectedImprovement": "40-60% write performance gain"
-    },
-    {
-      "priority": "medium",
-      "category": "database",
-      "collection": "devicefingerprints",
-      "issue": "High index size ratio (137.74%)",
-      "recommendation": "Review index efficiency, consider compound indexes",
-      "expectedImprovement": "20-30% storage reduction"
-    },
     {
       "priority": "medium",
       "category": "cache",

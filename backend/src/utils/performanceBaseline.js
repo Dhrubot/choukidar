@@ -58,7 +58,7 @@ class PerformanceBaseline {
    */
   async runCompleteBaseline() {
     console.log('🎯 Starting Performance Baseline Analysis...');
-    console.log('=' * 60);
+    console.log('='.repeat(60));
 
     try {
       // 1. Database Analysis
@@ -332,71 +332,56 @@ class PerformanceBaseline {
   /**
    * Analyze cache performance
    */
-  async analyzeCachePerformance() {
-    console.log('💾 Analyzing cache performance...');
+
+async analyzeCachePerformance() {
+  console.log('💾 Analyzing cache performance...');
+  
+  try {
+    // FIXED: Import the cache layer properly
+    const { cacheLayer } = require('../middleware/cacheLayer');
+
+    await cacheLayer.initialize();
     
-    try {
-      // Check if cacheLayer is imported and available
-      if (typeof cacheLayer !== 'undefined' && cacheLayer && cacheLayer.isConnected) {
-        const cacheHealth = await cacheLayer.healthCheck();
-        const cacheStats = cacheLayer.cacheStats || {};
-        
-        const hitRate = cacheStats.hits && cacheStats.misses ? 
-          (cacheStats.hits / (cacheStats.hits + cacheStats.misses) * 100).toFixed(2) + '%' : '0%';
-        
-        this.baseline.cache = {
-          status: cacheHealth.status,
-          hitRate,
-          hits: cacheStats.hits || 0,
-          misses: cacheStats.misses || 0,
-          sets: cacheStats.sets || 0,
-          deletes: cacheStats.deletes || 0,
-          memoryUsage: cacheHealth.memoryUsage || 'unknown',
-          latency: cacheHealth.latency || 'unknown'
-        };
-        
-        console.log(`  📈 Cache: ${hitRate} hit rate, ${cacheHealth.latency} latency`);
-        
-      } else {
-        // Try to check Redis connection manually
-        let redisStatus = 'disconnected';
-        try {
-          // Check if Redis is available via environment or manual connection test
-          const redis = require('redis');
-          const testClient = redis.createClient({
-            url: process.env.REDIS_URL || 'redis://localhost:6379',
-            socket: { connectTimeout: 2000 }
-          });
-          
-          await testClient.connect();
-          await testClient.ping();
-          redisStatus = 'available_but_not_initialized';
-          await testClient.disconnect();
-        } catch (error) {
-          redisStatus = 'unavailable';
-        }
-        
-        this.baseline.cache = { 
-          status: redisStatus, 
-          error: redisStatus === 'unavailable' ? 'Redis server not running' : 'CacheLayer not initialized',
-          hitRate: '0%',
-          recommendation: redisStatus === 'available_but_not_initialized' ? 
-            'Redis server is running but cacheLayer is not initialized in the app' :
-            'Install and start Redis server for massive performance gains'
-        };
-        
-        console.log(`  ❌ Cache: ${redisStatus}`);
-      }
+    if (cacheLayer && cacheLayer.isConnected && cacheLayer.isInitialized) {
+      const cacheHealth = await cacheLayer.healthCheck();
+      const cacheStats = cacheLayer.cacheStats || {};
       
-    } catch (error) {
-      console.error('  ❌ Cache analysis failed:', error.message);
-      this.baseline.cache = { 
-        error: error.message,
-        status: 'error',
-        hitRate: '0%'
+      const hitRate = cacheStats.hits && cacheStats.misses ? 
+        (cacheStats.hits / (cacheStats.hits + cacheStats.misses) * 100).toFixed(2) + '%' : '0%';
+      
+      this.baseline.cache = {
+        status: 'connected',
+        hitRate,
+        hits: cacheStats.hits || 0,
+        misses: cacheStats.misses || 0,
+        sets: cacheStats.sets || 0,
+        deletes: cacheStats.deletes || 0,
+        memoryUsage: cacheHealth.memoryUsage || 'unknown',
+        latency: cacheHealth.latency || 'unknown'
       };
+      
+      console.log(`  📈 Cache: ${hitRate} hit rate, ${cacheHealth.latency} latency`);
+      
+    } else {
+      this.baseline.cache = { 
+        status: 'available_but_not_initialized',
+        error: 'CacheLayer not properly connected',
+        hitRate: '0%',
+        recommendation: 'Check cache layer initialization'
+      };
+      
+      console.log(`  ❌ Cache: not properly initialized`);
     }
+    
+  } catch (error) {
+    console.error('  ❌ Cache analysis failed:', error.message);
+    this.baseline.cache = { 
+      error: error.message,
+      status: 'error',
+      hitRate: '0%'
+    };
   }
+}
 
   /**
    * Analyze memory usage
@@ -524,9 +509,9 @@ class PerformanceBaseline {
    * Display comprehensive baseline results
    */
   displayBaseline() {
-    console.log('\n' + '=' * 80);
+    console.log('\n' + '='.repeat(80));
     console.log('🎯 CHOUKIDAR BACKEND PERFORMANCE BASELINE REPORT');
-    console.log('=' * 80);
+    console.log('='.repeat(80));
     
     // Database Summary
     console.log('\n📊 DATABASE PERFORMANCE:');
@@ -557,9 +542,9 @@ class PerformanceBaseline {
       console.log(`      → Expected: ${rec.expectedImprovement}`);
     });
     
-    console.log('\n' + '=' * 80);
+    console.log('\n' + '='.repeat(80));
     console.log('🚀 Ready to begin optimizations based on this baseline!');
-    console.log('=' * 80 + '\n');
+    console.log('='.repeat(80) + '\n');
   }
 
   /**

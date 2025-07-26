@@ -24,7 +24,7 @@ class RedisCacheInitializer {
    */
   async initialize() {
     console.log('🚀 Redis Cache Initialization for Choukidar');
-    console.log('=' * 50);
+    console.log('='.repeat(50));
     console.log('Target: Fix 60-80% performance bottleneck');
     console.log('Expected: Error rate drop from 46% to <20%\n');
 

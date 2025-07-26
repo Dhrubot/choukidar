@@ -9,7 +9,7 @@ const { PerformanceBaseline } = require('./src/utils/performanceBaseline');
 
 async function runStandaloneBaseline() {
   console.log('🎯 Choukidar Performance Baseline Runner');
-  console.log('=' * 50);
+  console.log('='.repeat(50));
   
   try {
     // 1. Connect to MongoDB
@@ -70,7 +70,7 @@ async function runStandaloneBaseline() {
 
 function showCriticalFindings(results) {
   console.log('\n' + '🔥 CRITICAL PERFORMANCE ISSUES FOUND:');
-  console.log('=' * 50);
+  console.log('='.repeat(50));
   
   const critical = results.recommendations.filter(r => r.priority === 'critical');
   const high = results.recommendations.filter(r => r.priority === 'high');
