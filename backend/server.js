@@ -50,8 +50,17 @@ app.use(cookieParser()); // IMPORTANT: Don't miss this
 
 initializePerformanceTracking();
 
-// PERFORMANCE: Initialize Redis caching
-initializeCache();
+// PERFORMANCE: Initialize Redis caching - FIXED: Await initialization
+(async () => {
+  try {
+    console.log('🔄 Initializing Redis cache layer...');
+    await initializeCache();
+    console.log('✅ Redis cache layer initialization completed');
+  } catch (error) {
+    console.error('❌ Failed to initialize Redis cache:', error);
+    console.log('⚠️ Server will continue without Redis caching');
+  }
+})();
 
 // CONDITIONAL MIDDLEWARE: Apply heavy middleware only when needed
 if (process.env.NODE_ENV === 'development') {
@@ -443,6 +452,83 @@ server.listen(PORT, () => {
   console.log('   🔌 /api/websocket/status - WebSocket status');
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('🔌 WebSocket server will initialize after database connection');
+});
+
+let isShuttingDown = false;
+
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) {
+    console.log('⚠️ Shutdown already in progress...');
+    return;
+  }
+  
+  isShuttingDown = true;
+  console.log(`\n🛑 ${signal} received, starting graceful shutdown...`);
+  
+  try {
+    // 1. Stop accepting new connections
+    console.log('🔌 Closing HTTP server...');
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+    });
+    
+    // 2. Close WebSocket connections
+    if (global.socketHandler || app.locals.socketHandler) {
+      console.log('🔌 Closing WebSocket connections...');
+      const socketHandler = global.socketHandler || app.locals.socketHandler;
+      if (socketHandler && typeof socketHandler.close === 'function') {
+        await socketHandler.close();
+        console.log('✅ WebSocket server closed');
+      }
+    }
+    
+    // 3. Close Redis connections
+    if (global.cacheLayer || require('./src/middleware/cacheLayer').cacheLayer) {
+      console.log('🔌 Closing Redis connections...');
+      const { cacheLayer } = require('./src/middleware/cacheLayer');
+      if (cacheLayer && typeof cacheLayer.disconnect === 'function') {
+        await cacheLayer.disconnect();
+        console.log('✅ Redis connections closed');
+      }
+    }
+    
+    // 4. Close MongoDB connection
+    console.log('🔌 Closing MongoDB connection...');
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+    
+    // 5. Stop background processes
+    if (global.deviceFingerprintProcessor) {
+      console.log('🔌 Stopping background processors...');
+      if (typeof global.deviceFingerprintProcessor.stop === 'function') {
+        await global.deviceFingerprintProcessor.stop();
+        console.log('✅ Background processors stopped');
+      }
+    }
+    
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+    
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+    process.exit(1);
+  }
+};
+
+// Handle different shutdown signals
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // nodemon restart
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught Exception:', error);
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('UNHANDLED_REJECTION');
 });
 
 module.exports = { app, server };

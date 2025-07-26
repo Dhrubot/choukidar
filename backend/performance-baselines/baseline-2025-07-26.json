@@ -1,22 +1,22 @@
 {
-  "timestamp": "2025-07-25T20:15:16.897Z",
+  "timestamp": "2025-07-26T06:24:49.310Z",
   "database": {
     "collections": {
       "users": {
-        "documentCount": 1143,
-        "avgDocumentSize": 1613,
-        "totalSize": 1843898,
+        "documentCount": 1,
+        "avgDocumentSize": 2100,
+        "totalSize": 2100,
         "indexCount": 6,
-        "indexSize": 339968,
-        "indexSizeRatio": "18.44%"
+        "indexSize": 626688,
+        "indexSizeRatio": "29842.29%"
       },
       "reports": {
-        "documentCount": 1142,
-        "avgDocumentSize": 1579,
-        "totalSize": 1803501,
-        "indexCount": 11,
-        "indexSize": 622592,
-        "indexSizeRatio": "34.52%"
+        "documentCount": 0,
+        "avgDocumentSize": 0,
+        "totalSize": 0,
+        "indexCount": 19,
+        "indexSize": 1933312,
+        "indexSizeRatio": "0%"
       },
       "safezones": {
         "documentCount": 0,
@@ -27,20 +27,20 @@
         "indexSizeRatio": "0%"
       },
       "devicefingerprints": {
-        "documentCount": 1524,
-        "avgDocumentSize": 2933,
-        "totalSize": 4471292,
+        "documentCount": 382,
+        "avgDocumentSize": 2249,
+        "totalSize": 859394,
         "indexCount": 14,
-        "indexSize": 634880,
-        "indexSizeRatio": "14.20%"
+        "indexSize": 1183744,
+        "indexSizeRatio": "137.74%"
       },
       "auditlogs": {
-        "documentCount": 72257,
+        "documentCount": 72367,
         "avgDocumentSize": 320,
-        "totalSize": 23133292,
+        "totalSize": 23168734,
         "indexCount": 6,
-        "indexSize": 7569408,
-        "indexSizeRatio": "32.72%"
+        "indexSize": 7544832,
+        "indexSizeRatio": "32.56%"
       }
     },
     "indexes": {
@@ -117,7 +117,7 @@
         "efficiency": 100
       },
       "reports": {
-        "total": 11,
+        "total": 19,
         "indexes": [
           {
             "name": "_id_",
@@ -237,10 +237,106 @@
             "sparse": false,
             "background": true,
             "size": "unknown"
+          },
+          {
+            "name": "location.coordinates_2dsphere",
+            "keys": [
+              "location.coordinates"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "severity_1",
+            "keys": [
+              "severity"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "submittedBy.userId_1",
+            "keys": [
+              "submittedBy.userId"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "deduplication.contentHash_1",
+            "keys": [
+              "deduplication.contentHash"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "deduplication.temporalHash_1",
+            "keys": [
+              "deduplication.temporalHash"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "processingStatus.isProcessing_1_processingStatus.allPhasesCompleted_1_createdAt_1",
+            "keys": [
+              "processingStatus.isProcessing",
+              "processingStatus.allPhasesCompleted",
+              "createdAt"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "genderSensitive_1_communityValidation.requiresFemaleValidators_1_status_1",
+            "keys": [
+              "genderSensitive",
+              "communityValidation.requiresFemaleValidators",
+              "status"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "deduplication.contentHash_1_createdAt_1",
+            "keys": [
+              "deduplication.contentHash",
+              "createdAt"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
           }
         ],
-        "redundant": [],
-        "efficiency": 97
+        "redundant": [
+          {
+            "redundant": "genderSensitive_1",
+            "supersededBy": "genderSensitive_1_communityValidation.requiresFemaleValidators_1_status_1",
+            "reason": "Subset of compound index"
+          },
+          {
+            "redundant": "deduplication.contentHash_1",
+            "supersededBy": "deduplication.contentHash_1_createdAt_1",
+            "reason": "Subset of compound index"
+          }
+        ],
+        "efficiency": 48
       },
       "safezones": {
         "total": 6,
@@ -553,7 +649,7 @@
       "connectionState": "connected",
       "currentConnections": 22,
       "availableConnections": 51178,
-      "totalCreated": 8653,
+      "totalCreated": 9274,
       "maxPoolSize": 100,
       "minPoolSize": 10,
       "socketTimeout": 45000,
@@ -564,14 +660,14 @@
         {
           "name": "pending_reports",
           "collection": "reports",
-          "executionTime": 3,
-          "resultCount": 10,
+          "executionTime": 14,
+          "resultCount": 0,
           "performance": "excellent"
         },
         {
           "name": "location_reports",
           "collection": "reports",
-          "executionTime": 1,
+          "executionTime": 10,
           "resultCount": 0,
           "performance": "excellent"
         },
@@ -592,15 +688,15 @@
         {
           "name": "high_risk_devices",
           "collection": "devicefingerprints",
-          "executionTime": 1,
+          "executionTime": 5,
           "resultCount": 0,
           "performance": "excellent"
         }
       ],
-      "avgQueryTime": 1.6,
+      "avgQueryTime": 6.4,
       "slowQueries": []
     },
-    "avgQueryTime": 1.6,
+    "avgQueryTime": 6.4,
     "slowQueries": []
   },
   "middleware": {
@@ -620,18 +716,26 @@
     "highTrafficRoutes": []
   },
   "memory": {
-    "heapUsed": 34.23,
-    "heapTotal": 60.66,
+    "heapUsed": 34.45,
+    "heapTotal": 59.16,
     "external": 19.53,
     "arrayBuffers": 17.43,
-    "rss": 94.23
+    "rss": 94.93
   },
   "recommendations": [
+    {
+      "priority": "medium",
+      "category": "database",
+      "collection": "users",
+      "issue": "High index size ratio (29842.29%)",
+      "recommendation": "Review index efficiency, consider compound indexes",
+      "expectedImprovement": "20-30% storage reduction"
+    },
     {
       "priority": "high",
       "category": "database",
       "collection": "reports",
-      "issue": "Too many indexes (11)",
+      "issue": "Too many indexes (19)",
       "recommendation": "Optimize indexes, remove redundant ones",
       "expectedImprovement": "40-60% write performance gain"
     },
@@ -642,6 +746,14 @@
       "issue": "Too many indexes (14)",
       "recommendation": "Optimize indexes, remove redundant ones",
       "expectedImprovement": "40-60% write performance gain"
+    },
+    {
+      "priority": "medium",
+      "category": "database",
+      "collection": "devicefingerprints",
+      "issue": "High index size ratio (137.74%)",
+      "recommendation": "Review index efficiency, consider compound indexes",
+      "expectedImprovement": "20-30% storage reduction"
     },
     {
       "priority": "medium",
