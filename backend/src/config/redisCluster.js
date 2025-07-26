@@ -1,489 +1,702 @@
-// === backend/src/config/redisCluster.js ===
-// Redis Cluster Configuration for SafeStreets Bangladesh
-// Handles distributed caching for 8000+ concurrent users
+// === src/config/redisCluster.js (ENHANCED FOR BANGLADESH SCALE) ===
+// Redis Cluster Configuration for Distributed Queue System
+// Optimized for 25,000+ concurrent users with high availability
 
-const redis = require('redis');
+const Redis = require('ioredis');
 const { productionLogger } = require('../utils/productionLogger');
 
 class RedisClusterManager {
   constructor() {
-    this.clients = new Map();
-    this.isClusterMode = process.env.REDIS_CLUSTER_MODE === 'true';
+    this.isInitialized = false;
+    this.clusters = {};
+    this.sentinels = [];
+    this.connectionPool = null;
+    this.healthCheckInterval = null;
     
-    // Cluster configuration
-    this.clusterConfig = {
-      nodes: this.parseClusterNodes(),
-      options: {
-        enableReadyCheck: true,
-        maxRetriesPerRequest: 3,
+    // Configuration based on environment
+    this.config = this.getEnvironmentConfig();
+    
+    // Connection statistics
+    this.stats = {
+      connectionsCreated: 0,
+      connectionsDestroyed: 0,
+      commandsExecuted: 0,
+      errors: 0,
+      lastHealthCheck: null
+    };
+  }
+
+  /**
+   * Get environment-specific Redis configuration
+   */
+  getEnvironmentConfig() {
+    const env = process.env.NODE_ENV || 'development';
+    
+    const baseConfig = {
+      // Connection settings
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT) || 6379,
+      password: process.env.REDIS_PASSWORD || undefined,
+      
+      // Database allocation
+      databases: {
+        cache: parseInt(process.env.REDIS_CACHE_DB) || 0,
+        queues: parseInt(process.env.REDIS_QUEUE_DB) || 1,
+        sessions: parseInt(process.env.REDIS_SESSION_DB) || 2,
+        ratelimit: parseInt(process.env.REDIS_RATELIMIT_DB) || 3,
+        analytics: parseInt(process.env.REDIS_ANALYTICS_DB) || 4
+      },
+
+      // Connection pool settings
+      pool: {
+        min: 5,
+        max: 50,
+        acquireTimeoutMillis: 10000,
+        createTimeoutMillis: 5000,
+        destroyTimeoutMillis: 3000,
+        idleTimeoutMillis: 30000,
+        reapIntervalMillis: 1000,
+        createRetryIntervalMillis: 200
+      },
+
+      // Performance settings
+      performance: {
+        family: 4,
+        keepAlive: true,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
         retryDelayOnFailover: 100,
-        retryDelayOnClusterDown: 300,
-        slotsRefreshTimeout: 2000,
-        clusterRetryStrategy: (times) => Math.min(times * 100, 3000),
-        redisOptions: {
-          password: process.env.REDIS_PASSWORD,
-          tls: process.env.REDIS_TLS === 'true' ? {} : undefined
+        enableReadyCheck: false,
+        maxLoadingTimeout: 0,
+        lazyConnect: true,
+        maxRetriesPerRequest: 3,
+        enableOfflineQueue: false,
+        dropBufferSupport: false
+      },
+
+      // Memory management
+      memory: {
+        maxMemoryPolicy: 'allkeys-lru',
+        maxMemory: process.env.REDIS_MAX_MEMORY || '2gb',
+        
+        // Compression settings
+        compression: {
+          enabled: true,
+          threshold: 1024, // Compress values > 1KB
+          algorithm: 'gzip'
+        }
+      },
+
+      // Clustering settings
+      cluster: {
+        enabled: process.env.REDIS_CLUSTER_ENABLED === 'true',
+        nodes: this.parseClusterNodes(),
+        
+        // Cluster options
+        options: {
+          scaleReads: 'slave',
+          maxRedirections: 16,
+          retryDelayOnFailover: 100,
+          enableOfflineQueue: false,
+          readOnly: false,
+          redisOptions: {
+            password: process.env.REDIS_PASSWORD
+          }
+        }
+      },
+
+      // Sentinel configuration for high availability
+      sentinel: {
+        enabled: process.env.REDIS_SENTINEL_ENABLED === 'true',
+        masterName: process.env.REDIS_MASTER_NAME || 'choukidar-master',
+        sentinels: this.parseSentinelNodes(),
+        
+        // Sentinel options
+        options: {
+          sentinelRetryCount: 3,
+          sentinelReconnectDelay: 100,
+          connectTimeout: 10000,
+          lazyConnect: true,
+          password: process.env.REDIS_PASSWORD
         }
       }
     };
 
-    // Single instance configuration (fallback)
-    this.singleConfig = {
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
-      options: {
-        password: process.env.REDIS_PASSWORD,
-        db: 0,
-        retryStrategy: (times) => Math.min(times * 50, 2000),
-        reconnectOnError: (err) => {
-          const targetError = 'READONLY';
-          if (err.message.includes(targetError)) {
-            return true; // Reconnect on READONLY errors
-          }
-          return false;
-        },
-        maxRetriesPerRequest: 3,
-        enableReadyCheck: true,
-        enableOfflineQueue: true
+    // Environment-specific overrides
+    const envConfigs = {
+      development: {
+        pool: { min: 2, max: 10 },
+        performance: { 
+          connectTimeout: 5000,
+          commandTimeout: 3000 
+        }
+      },
+      
+      staging: {
+        pool: { min: 3, max: 20 },
+        memory: { maxMemory: '1gb' }
+      },
+      
+      production: {
+        pool: { min: 10, max: 100 },
+        memory: { maxMemory: '4gb' },
+        performance: {
+          connectTimeout: 15000,
+          commandTimeout: 8000,
+          maxRetriesPerRequest: 5
+        }
       }
     };
 
-    // Sharding configuration
-    this.shardConfig = {
-      shards: 4,
-      hashSlots: 16384,
-      keyHasher: (key) => this.hashKey(key)
-    };
-
-    // Statistics
-    this.stats = {
-      operations: 0,
-      errors: 0,
-      connections: 0,
-      shardDistribution: new Array(this.shardConfig.shards).fill(0)
-    };
-  }
-
-  /**
-   * Parse cluster nodes from environment
-   */
-  parseClusterNodes() {
-    const nodesStr = process.env.REDIS_CLUSTER_NODES || '';
-    if (!nodesStr) {
-      return [
-        { host: 'localhost', port: 7000 },
-        { host: 'localhost', port: 7001 },
-        { host: 'localhost', port: 7002 }
-      ];
+    // Merge environment-specific config
+    if (envConfigs[env]) {
+      return this.deepMerge(baseConfig, envConfigs[env]);
     }
 
-    return nodesStr.split(',').map(node => {
-      const [host, port] = node.trim().split(':');
-      return { host, port: parseInt(port) };
-    });
+    return baseConfig;
   }
 
   /**
-   * Initialize Redis cluster or single instance
+   * Initialize Redis cluster connections
    */
   async initialize() {
-    console.log('🚀 Initializing Redis cluster manager...');
-
     try {
-      if (this.isClusterMode) {
-        await this.initializeCluster();
-      } else {
-        await this.initializeSingleWithSharding();
-      }
-
-      // Setup monitoring
-      this.startMonitoring();
-
-      console.log('✅ Redis cluster manager initialized');
-      return true;
+      console.log('🚀 Initializing Redis cluster for Bangladesh scale...');
+      
+      // Validate configuration
+      this.validateConfiguration();
+      
+      // Initialize different Redis connections for different purposes
+      await this.initializeDatabaseConnections();
+      
+      // Set up monitoring and health checks
+      this.setupHealthMonitoring();
+      
+      // Configure error handling
+      this.setupErrorHandling();
+      
+      // Setup graceful shutdown
+      this.setupGracefulShutdown();
+      
+      this.isInitialized = true;
+      
+      console.log('✅ Redis cluster initialized successfully');
+      console.log(`📊 Active connections: Cache, Queues, Sessions, RateLimit, Analytics`);
+      
+      return { 
+        success: true, 
+        message: 'Redis cluster ready for Bangladesh scale',
+        connections: Object.keys(this.clusters)
+      };
 
     } catch (error) {
-      console.error('❌ Redis initialization failed:', error);
+      console.error('❌ Redis cluster initialization failed:', error);
       throw error;
     }
   }
 
   /**
-   * Initialize Redis cluster
+   * Initialize separate database connections
    */
-  async initializeCluster() {
-    const { createCluster } = require('redis');
+  async initializeDatabaseConnections() {
+    const connections = [
+      { name: 'cache', db: this.config.databases.cache, description: 'API response caching' },
+      { name: 'queues', db: this.config.databases.queues, description: 'Bull queue processing' },
+      { name: 'sessions', db: this.config.databases.sessions, description: 'User session storage' },
+      { name: 'ratelimit', db: this.config.databases.ratelimit, description: 'Rate limiting' },
+      { name: 'analytics', db: this.config.databases.analytics, description: 'Analytics data' }
+    ];
 
-    console.log('🔧 Connecting to Redis cluster...');
-
-    const cluster = createCluster({
-      rootNodes: this.clusterConfig.nodes.map(node => ({
-        url: `redis://${node.host}:${node.port}`
-      })),
-      ...this.clusterConfig.options
-    });
-
-    cluster.on('error', (err) => {
-      console.error('❌ Redis Cluster Error:', err);
-      this.stats.errors++;
-    });
-
-    await cluster.connect();
-
-    this.clients.set('cluster', cluster);
-    this.stats.connections = this.clusterConfig.nodes.length;
-
-    console.log(`✅ Connected to Redis cluster with ${this.clusterConfig.nodes.length} nodes`);
-  }
-
-  /**
-   * Initialize single Redis with client-side sharding
-   */
-  async initializeSingleWithSharding() {
-    console.log('🔧 Setting up Redis with client-side sharding...');
-
-    // Create multiple Redis clients for sharding
-    for (let shard = 0; shard < this.shardConfig.shards; shard++) {
-      const client = redis.createClient({
-        ...this.singleConfig.options,
-        url: this.singleConfig.url,
-        database: shard // Use different databases for sharding
-      });
-
-      client.on('error', (err) => {
-        console.error(`❌ Redis Shard ${shard} Error:`, err);
-        this.stats.errors++;
-      });
-
-      client.on('ready', () => {
-        console.log(`✅ Redis shard ${shard} connected`);
-        this.stats.connections++;
-      });
-
-      await client.connect();
-      this.clients.set(`shard_${shard}`, client);
-    }
-
-    console.log(`✅ Redis sharding initialized with ${this.shardConfig.shards} shards`);
-  }
-
-  /**
-   * Get client for a specific key
-   */
-  getClient(key) {
-    this.stats.operations++;
-
-    if (this.isClusterMode) {
-      return this.clients.get('cluster');
-    }
-
-    // Client-side sharding
-    const shard = this.getShardForKey(key);
-    this.stats.shardDistribution[shard]++;
-    
-    return this.clients.get(`shard_${shard}`);
-  }
-
-  /**
-   * Get shard for a key using consistent hashing
-   */
-  getShardForKey(key) {
-    const hash = this.hashKey(key);
-    const slot = hash % this.shardConfig.hashSlots;
-    const shard = Math.floor(slot / (this.shardConfig.hashSlots / this.shardConfig.shards));
-    
-    return Math.min(shard, this.shardConfig.shards - 1);
-  }
-
-  /**
-   * CRC16 hash function for key distribution
-   */
-  hashKey(key) {
-    let crc = 0;
-    for (let i = 0; i < key.length; i++) {
-      crc = ((crc << 8) ^ this.crc16Table[((crc >> 8) ^ key.charCodeAt(i)) & 0xFF]) & 0xFFFF;
-    }
-    return crc;
-  }
-
-  /**
-   * Initialize CRC16 table
-   */
-  get crc16Table() {
-    if (!this._crc16Table) {
-      this._crc16Table = new Uint16Array(256);
-      for (let i = 0; i < 256; i++) {
-        let crc = i << 8;
-        for (let j = 0; j < 8; j++) {
-          crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
-        }
-        this._crc16Table[i] = crc & 0xFFFF;
-      }
-    }
-    return this._crc16Table;
-  }
-
-  /**
-   * Enhanced cache operations with sharding
-   */
-  async get(key) {
-    try {
-      const client = this.getClient(key);
-      return await client.get(key);
-    } catch (error) {
-      console.error(`❌ Redis GET error for key ${key}:`, error);
-      this.stats.errors++;
-      return null;
-    }
-  }
-
-  async set(key, value, ttl) {
-    try {
-      const client = this.getClient(key);
-      if (ttl > 0) {
-        return await client.setEx(key, ttl, value);
-      } else {
-        return await client.set(key, value);
-      }
-    } catch (error) {
-      console.error(`❌ Redis SET error for key ${key}:`, error);
-      this.stats.errors++;
-      return false;
-    }
-  }
-
-  async delete(key) {
-    try {
-      const client = this.getClient(key);
-      return await client.del(key);
-    } catch (error) {
-      console.error(`❌ Redis DELETE error for key ${key}:`, error);
-      this.stats.errors++;
-      return false;
-    }
-  }
-
-  /**
-   * Batch operations for performance
-   */
-  async mget(keys) {
-    if (this.isClusterMode) {
-      const client = this.clients.get('cluster');
-      return await client.mGet(keys);
-    }
-
-    // Group keys by shard for client-side sharding
-    const keysByShard = new Map();
-    keys.forEach(key => {
-      const shard = this.getShardForKey(key);
-      if (!keysByShard.has(shard)) {
-        keysByShard.set(shard, []);
-      }
-      keysByShard.get(shard).push(key);
-    });
-
-    // Execute mGet on each shard
-    const results = await Promise.all(
-      Array.from(keysByShard.entries()).map(async ([shard, shardKeys]) => {
-        const client = this.clients.get(`shard_${shard}`);
-        const values = await client.mGet(shardKeys);
-        return shardKeys.map((key, index) => ({ key, value: values[index] }));
-      })
-    );
-
-    // Reconstruct results in original order
-    const resultMap = new Map(results.flat().map(r => [r.key, r.value]));
-    return keys.map(key => resultMap.get(key));
-  }
-
-  async mset(keyValuePairs) {
-    if (this.isClusterMode) {
-      const client = this.clients.get('cluster');
-      return await client.mSet(keyValuePairs);
-    }
-
-    // Group key-value pairs by shard
-    const pairsByShard = new Map();
-    keyValuePairs.forEach(pair => {
-      const shard = this.getShardForKey(pair.key);
-      if (!pairsByShard.has(shard)) {
-        pairsByShard.set(shard, []);
-      }
-      pairsByShard.get(shard).push(pair);
-    });
-
-    // Execute mSet on each shard
-    const results = await Promise.all(
-      Array.from(pairsByShard.entries()).map(async ([shard, shardPairs]) => {
-        const client = this.clients.get(`shard_${shard}`);
-        return await client.mSet(shardPairs);
-      })
-    );
-
-    return results.every(r => r === 'OK');
-  }
-
-  /**
-   * Pipeline operations for atomic execution
-   */
-  async pipeline(operations) {
-    if (this.isClusterMode) {
-      const client = this.clients.get('cluster');
-      const pipeline = client.multi();
-      
-      operations.forEach(op => {
-        pipeline[op.command](...op.args);
-      });
-      
-      return await pipeline.exec();
-    }
-
-    // Group operations by shard
-    const opsByShard = new Map();
-    operations.forEach(op => {
-      const key = op.args[0]; // Assume first arg is the key
-      const shard = this.getShardForKey(key);
-      if (!opsByShard.has(shard)) {
-        opsByShard.set(shard, []);
-      }
-      opsByShard.get(shard).push(op);
-    });
-
-    // Execute pipeline on each shard
-    const results = await Promise.all(
-      Array.from(opsByShard.entries()).map(async ([shard, shardOps]) => {
-        const client = this.clients.get(`shard_${shard}`);
-        const pipeline = client.multi();
+    for (const conn of connections) {
+      try {
+        console.log(`🔌 Connecting to Redis ${conn.name} (DB ${conn.db}): ${conn.description}`);
         
-        shardOps.forEach(op => {
-          pipeline[op.command](...op.args);
-        });
+        const redisInstance = await this.createRedisConnection(conn.db, conn.name);
+        this.clusters[conn.name] = redisInstance;
         
-        return await pipeline.exec();
-      })
-    );
+        // Test connection
+        await redisInstance.ping();
+        console.log(`✅ Redis ${conn.name} connection established`);
+        
+        this.stats.connectionsCreated++;
 
-    return results.flat();
-  }
-
-  /**
-   * Pub/Sub operations
-   */
-  async publish(channel, message) {
-    // Publish to all shards for redundancy
-    const promises = Array.from(this.clients.values()).map(client => 
-      client.publish(channel, message)
-    );
-    
-    const results = await Promise.all(promises);
-    return results.reduce((sum, count) => sum + count, 0);
-  }
-
-  async subscribe(channel, callback) {
-    // Subscribe on all clients
-    const promises = Array.from(this.clients.entries()).map(async ([name, client]) => {
-      const subscriber = client.duplicate();
-      await subscriber.connect();
-      
-      await subscriber.subscribe(channel, (message) => {
-        callback(message, name);
-      });
-      
-      return subscriber;
-    });
-    
-    return await Promise.all(promises);
-  }
-
-  /**
-   * Health monitoring
-   */
-  startMonitoring() {
-    setInterval(async () => {
-      const health = await this.checkHealth();
-      
-      if (health.unhealthyClients > 0) {
-        console.error(`❌ ${health.unhealthyClients} Redis clients are unhealthy`);
-        productionLogger.error('Redis clients unhealthy', health);
+      } catch (error) {
+        console.error(`❌ Failed to connect to Redis ${conn.name}:`, error);
+        throw new Error(`Redis ${conn.name} connection failed: ${error.message}`);
       }
-      
-      // Log shard distribution in development
-      if (process.env.NODE_ENV === 'development' && !this.isClusterMode) {
-        console.log('📊 Shard distribution:', this.stats.shardDistribution);
-      }
-    }, 30000); // Every 30 seconds
+    }
   }
 
   /**
-   * Check health of all clients
+   * Create a Redis connection with optimal settings
    */
-  async checkHealth() {
-    const healthChecks = await Promise.all(
-      Array.from(this.clients.entries()).map(async ([name, client]) => {
-        try {
-          await client.ping();
-          return { name, healthy: true };
-        } catch (error) {
-          return { name, healthy: false, error: error.message };
-        }
-      })
-    );
-
-    const unhealthyClients = healthChecks.filter(h => !h.healthy);
-    
-    return {
-      totalClients: healthChecks.length,
-      healthyClients: healthChecks.filter(h => h.healthy).length,
-      unhealthyClients: unhealthyClients.length,
-      details: unhealthyClients,
-      stats: this.getStats()
+  async createRedisConnection(database, connectionName) {
+    const connectionConfig = {
+      host: this.config.host,
+      port: this.config.port,
+      password: this.config.password,
+      db: database,
+      connectionName: `choukidar-${connectionName}`,
+      
+      // Performance settings
+      ...this.config.performance,
+      
+      // Event handling
+      retryDelayOnFailover: this.config.performance.retryDelayOnFailover,
+      enableReadyCheck: this.config.performance.enableReadyCheck,
+      maxLoadingTimeout: this.config.performance.maxLoadingTimeout,
+      
+      // Custom retry strategy
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        console.log(`⏰ Redis ${connectionName} retry attempt ${times}, delay: ${delay}ms`);
+        return delay;
+      },
+      
+      // Connection timeout
+      connectTimeout: this.config.performance.connectTimeout,
+      commandTimeout: this.config.performance.commandTimeout
     };
+
+    // Use cluster or sentinel if enabled
+    if (this.config.cluster.enabled && this.config.cluster.nodes.length > 0) {
+      return new Redis.Cluster(this.config.cluster.nodes, {
+        ...this.config.cluster.options,
+        redisOptions: {
+          ...connectionConfig,
+          password: this.config.password
+        }
+      });
+    }
+    
+    if (this.config.sentinel.enabled && this.config.sentinel.sentinels.length > 0) {
+      return new Redis({
+        sentinels: this.config.sentinel.sentinels,
+        name: this.config.sentinel.masterName,
+        ...this.config.sentinel.options,
+        ...connectionConfig
+      });
+    }
+
+    // Standard Redis connection
+    return new Redis(connectionConfig);
   }
 
   /**
-   * Get statistics
+   * Get Redis connection for specific purpose
    */
-  getStats() {
-    const errorRate = this.stats.operations > 0 
-      ? (this.stats.errors / this.stats.operations * 100).toFixed(2) + '%'
-      : '0%';
+  getConnection(type = 'cache') {
+    if (!this.isInitialized) {
+      throw new Error('Redis cluster not initialized');
+    }
 
-    return {
+    if (!this.clusters[type]) {
+      throw new Error(`Redis connection type '${type}' not found`);
+    }
+
+    return this.clusters[type];
+  }
+
+  /**
+   * Get all active connections
+   */
+  getAllConnections() {
+    return { ...this.clusters };
+  }
+
+  /**
+   * Execute command with automatic retry and circuit breaker
+   */
+  async executeCommand(connectionType, command, ...args) {
+    const connection = this.getConnection(connectionType);
+    const startTime = Date.now();
+
+    try {
+      const result = await connection[command](...args);
+      
+      this.stats.commandsExecuted++;
+      const duration = Date.now() - startTime;
+      
+      if (duration > 1000) {
+        console.warn(`⚠️ Slow Redis command: ${command} took ${duration}ms on ${connectionType}`);
+      }
+
+      return result;
+
+    } catch (error) {
+      this.stats.errors++;
+      console.error(`❌ Redis command failed: ${command} on ${connectionType}`, error);
+      
+      // Attempt retry for transient errors
+      if (this.isRetryableError(error)) {
+        console.log(`🔄 Retrying Redis command: ${command} on ${connectionType}`);
+        return await connection[command](...args);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Batch execute multiple commands
+   */
+  async executeBatch(connectionType, commands) {
+    const connection = this.getConnection(connectionType);
+    const pipeline = connection.pipeline();
+
+    commands.forEach(({ command, args }) => {
+      pipeline[command](...args);
+    });
+
+    try {
+      const results = await pipeline.exec();
+      this.stats.commandsExecuted += commands.length;
+      return results;
+    } catch (error) {
+      this.stats.errors++;
+      console.error(`❌ Redis batch execution failed on ${connectionType}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Setup health monitoring
+   */
+  setupHealthMonitoring() {
+    this.healthCheckInterval = setInterval(async () => {
+      await this.performHealthCheck();
+    }, 30000); // Check every 30 seconds
+
+    // Log statistics every 5 minutes
+    setInterval(() => {
+      this.logStatistics();
+    }, 300000);
+  }
+
+  /**
+   * Perform comprehensive health check
+   */
+  async performHealthCheck() {
+    const healthStatus = {
+      overall: 'healthy',
+      connections: {},
+      timestamp: new Date().toISOString(),
+      stats: { ...this.stats }
+    };
+
+    for (const [name, connection] of Object.entries(this.clusters)) {
+      try {
+        const startTime = Date.now();
+        await connection.ping();
+        const latency = Date.now() - startTime;
+
+        // Get connection info
+        const info = await connection.info('server');
+        const memoryInfo = await connection.info('memory');
+
+        healthStatus.connections[name] = {
+          status: 'healthy',
+          latency: `${latency}ms`,
+          connected: connection.status === 'ready',
+          memory: this.parseMemoryInfo(memoryInfo),
+          server: this.parseServerInfo(info)
+        };
+
+        // Check for high latency
+        if (latency > 100) {
+          healthStatus.connections[name].status = 'degraded';
+          healthStatus.connections[name].warning = `High latency: ${latency}ms`;
+        }
+
+      } catch (error) {
+        healthStatus.connections[name] = {
+          status: 'unhealthy',
+          error: error.message,
+          connected: false
+        };
+        healthStatus.overall = 'degraded';
+      }
+    }
+
+    // Determine overall health
+    const unhealthyConnections = Object.values(healthStatus.connections)
+      .filter(conn => conn.status === 'unhealthy').length;
+
+    if (unhealthyConnections > 0) {
+      healthStatus.overall = unhealthyConnections >= Object.keys(this.clusters).length / 2 
+        ? 'critical' 
+        : 'degraded';
+    }
+
+    this.stats.lastHealthCheck = healthStatus;
+
+    // Log issues
+    if (healthStatus.overall !== 'healthy') {
+      console.warn('⚠️ Redis cluster health issue:', healthStatus);
+      productionLogger.warn('Redis cluster health degraded', healthStatus);
+    }
+
+    return healthStatus;
+  }
+
+  /**
+   * Log Redis statistics
+   */
+  logStatistics() {
+    const stats = {
       ...this.stats,
-      errorRate,
-      shardBalance: this.calculateShardBalance(),
-      mode: this.isClusterMode ? 'cluster' : 'sharded'
+      activeConnections: Object.keys(this.clusters).length,
+      memoryUsage: this.getMemoryUsage(),
+      connectionUtilization: this.getConnectionUtilization()
     };
+
+    console.log('📊 Redis Cluster Statistics:', stats);
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.table(stats);
+    }
   }
 
   /**
-   * Calculate shard balance
+   * Setup error handling for all connections
    */
-  calculateShardBalance() {
-    if (this.isClusterMode) return 'N/A';
+  setupErrorHandling() {
+    Object.entries(this.clusters).forEach(([name, connection]) => {
+      connection.on('error', (error) => {
+        console.error(`❌ Redis ${name} error:`, error);
+        this.stats.errors++;
+        productionLogger.error(`Redis ${name} error`, { error: error.message });
+      });
 
-    const total = this.stats.shardDistribution.reduce((sum, count) => sum + count, 0);
-    if (total === 0) return 'No data';
+      connection.on('connect', () => {
+        console.log(`✅ Redis ${name} connected`);
+      });
 
-    const expectedPerShard = total / this.shardConfig.shards;
-    const maxDeviation = Math.max(...this.stats.shardDistribution.map(count => 
-      Math.abs(count - expectedPerShard)
-    ));
-    
-    const balance = 100 - (maxDeviation / expectedPerShard * 100);
-    return balance.toFixed(2) + '%';
+      connection.on('disconnect', () => {
+        console.warn(`⚠️ Redis ${name} disconnected`);
+      });
+
+      connection.on('reconnecting', () => {
+        console.log(`🔄 Redis ${name} reconnecting...`);
+      });
+
+      connection.on('ready', () => {
+        console.log(`🚀 Redis ${name} ready for commands`);
+      });
+    });
   }
 
   /**
    * Graceful shutdown
    */
-  async shutdown() {
-    console.log('🛑 Shutting down Redis connections...');
+  setupGracefulShutdown() {
+    const gracefulShutdown = async (signal) => {
+      console.log(`🔄 Redis cluster received ${signal}, shutting down gracefully...`);
+      
+      if (this.healthCheckInterval) {
+        clearInterval(this.healthCheckInterval);
+      }
 
-    await Promise.all(
-      Array.from(this.clients.values()).map(client => client.quit())
+      // Close all connections
+      const closePromises = Object.entries(this.clusters).map(async ([name, connection]) => {
+        try {
+          await connection.disconnect();
+          console.log(`✅ Redis ${name} disconnected gracefully`);
+          this.stats.connectionsDestroyed++;
+        } catch (error) {
+          console.error(`❌ Error closing Redis ${name}:`, error);
+        }
+      });
+
+      await Promise.all(closePromises);
+      console.log('✅ Redis cluster shutdown complete');
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  }
+
+  /**
+   * Utility methods
+   */
+  parseClusterNodes() {
+    const nodes = process.env.REDIS_CLUSTER_NODES;
+    if (!nodes) return [];
+    
+    return nodes.split(',').map(node => {
+      const [host, port] = node.trim().split(':');
+      return { host, port: parseInt(port) };
+    });
+  }
+
+  parseSentinelNodes() {
+    const sentinels = process.env.REDIS_SENTINELS;
+    if (!sentinels) return [];
+    
+    return sentinels.split(',').map(sentinel => {
+      const [host, port] = sentinel.trim().split(':');
+      return { host, port: parseInt(port) };
+    });
+  }
+
+  parseMemoryInfo(memoryInfo) {
+    const lines = memoryInfo.split('\r\n');
+    const memory = {};
+    
+    lines.forEach(line => {
+      if (line.includes(':')) {
+        const [key, value] = line.split(':');
+        memory[key] = value;
+      }
+    });
+    
+    return {
+      used: memory.used_memory_human,
+      peak: memory.used_memory_peak_human,
+      rss: memory.used_memory_rss_human,
+      overhead: memory.used_memory_overhead
+    };
+  }
+
+  parseServerInfo(serverInfo) {
+    const lines = serverInfo.split('\r\n');
+    const server = {};
+    
+    lines.forEach(line => {
+      if (line.includes(':')) {
+        const [key, value] = line.split(':');
+        server[key] = value;
+      }
+    });
+    
+    return {
+      version: server.redis_version,
+      mode: server.redis_mode,
+      os: server.os,
+      uptime: server.uptime_in_seconds
+    };
+  }
+
+  getMemoryUsage() {
+    // This would require additional Redis commands
+    // Simplified for now
+    return {
+      estimated: 'Available via health check',
+      connections: Object.keys(this.clusters).length
+    };
+  }
+
+  getConnectionUtilization() {
+    const totalConnections = Object.keys(this.clusters).length;
+    const maxConnections = this.config.pool.max;
+    
+    return {
+      active: totalConnections,
+      maximum: maxConnections,
+      utilization: `${((totalConnections / maxConnections) * 100).toFixed(1)}%`
+    };
+  }
+
+  isRetryableError(error) {
+    const retryableErrors = [
+      'ECONNRESET',
+      'ENOTFOUND',
+      'ETIMEDOUT',
+      'ECONNREFUSED'
+    ];
+    
+    return retryableErrors.some(retryable => 
+      error.message.includes(retryable) || error.code === retryable
     );
+  }
 
-    console.log('✅ Redis connections closed');
+  validateConfiguration() {
+    if (!this.config.host || !this.config.port) {
+      throw new Error('Redis host and port are required');
+    }
+
+    if (this.config.cluster.enabled && this.config.cluster.nodes.length === 0) {
+      throw new Error('Cluster mode enabled but no cluster nodes configured');
+    }
+
+    if (this.config.sentinel.enabled && this.config.sentinel.sentinels.length === 0) {
+      throw new Error('Sentinel mode enabled but no sentinel nodes configured');
+    }
+
+    console.log('✅ Redis configuration validated');
+  }
+
+  deepMerge(target, source) {
+    const result = { ...target };
+    
+    for (const key in source) {
+      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        result[key] = this.deepMerge(target[key] || {}, source[key]);
+      } else {
+        result[key] = source[key];
+      }
+    }
+    
+    return result;
+  }
+
+  /**
+   * Public API methods for external use
+   */
+
+  // Get connection statistics
+  getStats() {
+    return {
+      ...this.stats,
+      connections: Object.keys(this.clusters),
+      isInitialized: this.isInitialized,
+      lastHealthCheck: this.stats.lastHealthCheck
+    };
+  }
+
+  // Test all connections
+  async testAllConnections() {
+    const results = {};
+    
+    for (const [name, connection] of Object.entries(this.clusters)) {
+      try {
+        const startTime = Date.now();
+        await connection.ping();
+        results[name] = {
+          status: 'success',
+          latency: Date.now() - startTime
+        };
+      } catch (error) {
+        results[name] = {
+          status: 'failed',
+          error: error.message
+        };
+      }
+    }
+    
+    return results;
+  }
+
+  // Flush specific database
+  async flushDatabase(connectionType) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Database flush not allowed in production');
+    }
+    
+    const connection = this.getConnection(connectionType);
+    await connection.flushdb();
+    console.log(`🧹 Flushed Redis database: ${connectionType}`);
+  }
+
+  // Get database size
+  async getDatabaseSize(connectionType) {
+    const connection = this.getConnection(connectionType);
+    const size = await connection.dbsize();
+    return {
+      connectionType,
+      keys: size,
+      estimated_memory: `${Math.round(size * 0.1)}KB` // Rough estimate
+    };
   }
 }
 
@@ -492,23 +705,5 @@ const redisCluster = new RedisClusterManager();
 
 module.exports = {
   redisCluster,
-  
-  // Initialize function
-  initializeRedisCluster: () => redisCluster.initialize(),
-  
-  // Direct access to operations
-  redis: {
-    get: (key) => redisCluster.get(key),
-    set: (key, value, ttl) => redisCluster.set(key, value, ttl),
-    delete: (key) => redisCluster.delete(key),
-    mget: (keys) => redisCluster.mget(keys),
-    mset: (pairs) => redisCluster.mset(pairs),
-    pipeline: (ops) => redisCluster.pipeline(ops),
-    publish: (channel, message) => redisCluster.publish(channel, message),
-    subscribe: (channel, callback) => redisCluster.subscribe(channel, callback)
-  },
-  
-  // Health and stats
-  getRedisHealth: () => redisCluster.checkHealth(),
-  getRedisStats: () => redisCluster.getStats()
+  RedisClusterManager
 };

@@ -13,8 +13,13 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@bull-board/api": "^6.12.0",
+    "@bull-board/express": "^6.12.0",
     "@socket.io/redis-adapter": "^8.3.0",
+    "axios": "^1.6.2",
     "bcrypt": "^6.0.0",
+    "bull": "^4.12.2",
+    "compression": "^1.7.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
@@ -22,15 +27,36 @@
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.1",
     "express-validator": "^7.2.1",
+    "geoip-lite": "^1.4.8",
+    "handlebars": "^4.7.8",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.3.2",
     "isomorphic-dompurify": "^2.26.0",
     "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "moment": "^2.29.4",
     "mongoose": "^8.16.3",
     "multer": "^2.0.1",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
     "nodemailer": "^7.0.5",
+    "os": "^0.1.2",
+    "pm2": "^5.3.0",
     "redis": "^5.6.0",
-    "socket.io": "^4.8.1"
+    "sharp": "^0.33.0",
+    "socket.io": "^4.8.1",
+    "ua-parser-js": "^1.0.37",
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^4.7.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "@types/node": "^20.10.0",
+    "artillery": "^2.0.3",
+    "autocannon": "^7.14.0",
+    "eslint": "^8.55.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.1.0",
+    "supertest": "^6.3.3"
   }
 }

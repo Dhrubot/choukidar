@@ -9,8 +9,9 @@ const User = require('../models/User');
 const DeviceFingerprint = require('../models/DeviceFingerprint');
 const Report = require('../models/Report');
 const { cacheLayer } = require('../middleware/cacheLayer');
+const { productionLogger } = require('../utils/productionLogger');
 
-class EnhancedScaledSocketHandler {
+class ScaledSocketHandler {
   constructor(server) {
     this.server = server;
     this.io = null;
@@ -317,7 +318,7 @@ class EnhancedScaledSocketHandler {
       // Handle JWT token auth or device fingerprint auth
       if (token) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        user = await User.findById(decoded.userId);
+        user = await User.findById(decoded.userId).lean();
         if (!user) throw new Error('User not found');
       }
 
@@ -329,7 +330,7 @@ class EnhancedScaledSocketHandler {
       // Update client info
       clientInfo.authenticated = true;
       clientInfo.userId = user?._id || null;
-      clientInfo.userType = user?.userType || userType || 'anonymous';
+      clientInfo.userType = user?.userType || 'anonymous';
       clientInfo.deviceFingerprint = deviceFingerprint;
 
       // Store in Redis for cross-server access
@@ -1273,7 +1274,7 @@ class EnhancedScaledSocketHandler {
   }
 }
 
-module.exports = EnhancedScaledSocketHandler;
+module.exports = ScaledSocketHandler;
 
 
 // socketHandler.notifySecurityEvent({
