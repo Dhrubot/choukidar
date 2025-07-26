@@ -158,6 +158,25 @@ app.use((req, res, next) => {
   next();
 });
 
+// ===== PHASE 1: DISTRIBUTED QUEUE INITIALIZATION =====
+(async () => {
+  if (process.env.INITIALIZE_DISTRIBUTED_QUEUE === 'true') {
+    try {
+      console.log('🚀 Initializing distributed queue system...');
+      
+      const { distributedQueueService } = require('./src/services/distributedQueueService');
+      await distributedQueueService.initialize();
+      
+      const { reportProcessor } = require('./src/middleware/reportProcessor');
+      await reportProcessor.initialize();
+      
+      console.log('✅ Phase 1 distributed queue system ready');
+    } catch (error) {
+      console.warn('⚠️ Using fallback processing:', error.message);
+    }
+  }
+})()
+
 // EXISTING ROUTES (PRESERVED)
 app.use('/api/reports', require('./src/routes/reports'));
 app.use('/api/admin', require('./src/routes/admin'));

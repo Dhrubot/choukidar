@@ -1,22 +1,22 @@
 {
-  "timestamp": "2025-07-26T16:39:05.618Z",
+  "timestamp": "2025-07-26T22:01:59.508Z",
   "database": {
     "collections": {
       "users": {
-        "documentCount": 1322,
-        "avgDocumentSize": 1613,
-        "totalSize": 2132577,
-        "indexCount": 4,
-        "indexSize": 176128,
-        "indexSizeRatio": "8.26%"
+        "documentCount": 4231,
+        "avgDocumentSize": 1612,
+        "totalSize": 6824283,
+        "indexCount": 6,
+        "indexSize": 790528,
+        "indexSizeRatio": "11.58%"
       },
       "reports": {
-        "documentCount": 1321,
-        "avgDocumentSize": 2463,
-        "totalSize": 3254141,
-        "indexCount": 5,
-        "indexSize": 217088,
-        "indexSizeRatio": "6.67%"
+        "documentCount": 44370,
+        "avgDocumentSize": 2103,
+        "totalSize": 93334552,
+        "indexCount": 26,
+        "indexSize": 10715136,
+        "indexSizeRatio": "11.48%"
       },
       "safezones": {
         "documentCount": 0,
@@ -27,25 +27,25 @@
         "indexSizeRatio": "0%"
       },
       "devicefingerprints": {
-        "documentCount": 1703,
-        "avgDocumentSize": 2957,
-        "totalSize": 5037421,
-        "indexCount": 5,
-        "indexSize": 262144,
-        "indexSizeRatio": "5.20%"
+        "documentCount": 4612,
+        "avgDocumentSize": 3087,
+        "totalSize": 14238078,
+        "indexCount": 6,
+        "indexSize": 1011712,
+        "indexSizeRatio": "7.11%"
       },
       "auditlogs": {
-        "documentCount": 72417,
+        "documentCount": 72515,
         "avgDocumentSize": 320,
-        "totalSize": 23184857,
-        "indexCount": 4,
-        "indexSize": 6340608,
-        "indexSizeRatio": "27.35%"
+        "totalSize": 23217145,
+        "indexCount": 6,
+        "indexSize": 7577600,
+        "indexSizeRatio": "32.64%"
       }
     },
     "indexes": {
       "users": {
-        "total": 4,
+        "total": 6,
         "indexes": [
           {
             "name": "_id_",
@@ -91,13 +91,33 @@
             "sparse": false,
             "background": true,
             "size": "unknown"
+          },
+          {
+            "name": "userId_1",
+            "keys": [
+              "userId"
+            ],
+            "unique": true,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "userType_1",
+            "keys": [
+              "userType"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
           }
         ],
         "redundant": [],
         "efficiency": 100
       },
       "reports": {
-        "total": 5,
+        "total": 26,
         "indexes": [
           {
             "name": "_id_",
@@ -157,10 +177,248 @@
             "sparse": true,
             "background": true,
             "size": "unknown"
+          },
+          {
+            "name": "location.coordinates_2dsphere",
+            "keys": [
+              "location.coordinates"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "submittedBy.userId_1",
+            "keys": [
+              "submittedBy.userId"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "submittedBy.deviceFingerprint_1",
+            "keys": [
+              "submittedBy.deviceFingerprint"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "deduplication.contentHash_1",
+            "keys": [
+              "deduplication.contentHash"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "deduplication.temporalHash_1",
+            "keys": [
+              "deduplication.temporalHash"
+            ],
+            "unique": false,
+            "sparse": true,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "processingStatus.isProcessing_1_processingStatus.allPhasesCompleted_1_createdAt_1",
+            "keys": [
+              "processingStatus.isProcessing",
+              "processingStatus.allPhasesCompleted",
+              "createdAt"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "genderSensitive_1_communityValidation.requiresFemaleValidators_1_status_1",
+            "keys": [
+              "genderSensitive",
+              "communityValidation.requiresFemaleValidators",
+              "status"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "deduplication.contentHash_1_createdAt_1",
+            "keys": [
+              "deduplication.contentHash",
+              "createdAt"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "type_1",
+            "keys": [
+              "type"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "location.withinBangladesh_1",
+            "keys": [
+              "location.withinBangladesh"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "severity_1",
+            "keys": [
+              "severity"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "status_1",
+            "keys": [
+              "status"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "genderSensitive_1",
+            "keys": [
+              "genderSensitive"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "processingStatus.overallStatus_1_processingStatus.processingMode_1_createdAt_1",
+            "keys": [
+              "processingStatus.overallStatus",
+              "processingStatus.processingMode",
+              "createdAt"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "processingStatus.distributedProcessing.tier_1_processingStatus.distributedProcessing.priority_1_processingStatus.overallStatus_1",
+            "keys": [
+              "processingStatus.distributedProcessing.tier",
+              "processingStatus.distributedProcessing.priority",
+              "processingStatus.overallStatus"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "processingStatus.distributedProcessing.jobId_1",
+            "keys": [
+              "processingStatus.distributedProcessing.jobId"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "processingStatus.distributedProcessing.queueName_1_processingStatus.overallStatus_1",
+            "keys": [
+              "processingStatus.distributedProcessing.queueName",
+              "processingStatus.overallStatus"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "location.withinBangladesh_1_genderSensitive_1_status_1",
+            "keys": [
+              "location.withinBangladesh",
+              "genderSensitive",
+              "status"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "timeOfDayRisk_1_genderSensitive_1_severity_1",
+            "keys": [
+              "timeOfDayRisk",
+              "genderSensitive",
+              "severity"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "securityFlags.requiresFemaleValidation_1_moderation.femaleModeratorRequired_1_status_1",
+            "keys": [
+              "securityFlags.requiresFemaleValidation",
+              "moderation.femaleModeratorRequired",
+              "status"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "securityScore_1_threatIntelligence.riskLevel_1",
+            "keys": [
+              "securityScore",
+              "threatIntelligence.riskLevel"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
           }
         ],
-        "redundant": [],
-        "efficiency": 100
+        "redundant": [
+          {
+            "redundant": "deduplication.contentHash_1",
+            "supersededBy": "deduplication.contentHash_1_createdAt_1",
+            "reason": "Subset of compound index"
+          },
+          {
+            "redundant": "location.withinBangladesh_1",
+            "supersededBy": "location.withinBangladesh_1_genderSensitive_1_status_1",
+            "reason": "Subset of compound index"
+          }
+        ],
+        "efficiency": 27
       },
       "safezones": {
         "total": 6,
@@ -240,7 +498,7 @@
         "efficiency": 100
       },
       "devicefingerprints": {
-        "total": 5,
+        "total": 6,
         "indexes": [
           {
             "name": "_id_",
@@ -296,13 +554,23 @@
             "sparse": false,
             "background": true,
             "size": "unknown"
+          },
+          {
+            "name": "userId_1",
+            "keys": [
+              "userId"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
           }
         ],
         "redundant": [],
         "efficiency": 100
       },
       "auditlogs": {
-        "total": 4,
+        "total": 6,
         "indexes": [
           {
             "name": "_id_",
@@ -349,6 +617,26 @@
             "sparse": false,
             "background": true,
             "size": "unknown"
+          },
+          {
+            "name": "actor.userId_1",
+            "keys": [
+              "actor.userId"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
+          },
+          {
+            "name": "timestamp_1",
+            "keys": [
+              "timestamp"
+            ],
+            "unique": false,
+            "sparse": false,
+            "background": true,
+            "size": "unknown"
           }
         ],
         "redundant": [],
@@ -357,9 +645,9 @@
     },
     "connectionPool": {
       "connectionState": "connected",
-      "currentConnections": 36,
-      "availableConnections": 51164,
-      "totalCreated": 9820,
+      "currentConnections": 19,
+      "availableConnections": 51181,
+      "totalCreated": 10673,
       "maxPoolSize": 100,
       "minPoolSize": 10,
       "socketTimeout": 45000,
@@ -377,21 +665,21 @@
         {
           "name": "location_reports",
           "collection": "reports",
-          "executionTime": 2,
-          "resultCount": 0,
-          "performance": "excellent"
+          "executionTime": 426,
+          "resultCount": 10,
+          "performance": "poor"
         },
         {
           "name": "active_safezones",
           "collection": "safezones",
-          "executionTime": 0,
+          "executionTime": 1,
           "resultCount": 0,
           "performance": "excellent"
         },
         {
           "name": "admin_users",
           "collection": "users",
-          "executionTime": 0,
+          "executionTime": 1,
           "resultCount": 1,
           "performance": "excellent"
         },
@@ -403,10 +691,18 @@
           "performance": "excellent"
         }
       ],
-      "avgQueryTime": 1.2,
-      "slowQueries": []
+      "avgQueryTime": 86.4,
+      "slowQueries": [
+        {
+          "name": "location_reports",
+          "collection": "reports",
+          "executionTime": 426,
+          "resultCount": 10,
+          "performance": "poor"
+        }
+      ]
     },
-    "avgQueryTime": 1.2,
+    "avgQueryTime": 86.4,
     "slowQueries": []
   },
   "middleware": {
@@ -421,7 +717,7 @@
     "misses": 0,
     "sets": 0,
     "deletes": 0,
-    "memoryUsage": "1.82M",
+    "memoryUsage": "2.28M",
     "latency": "1ms"
   },
   "routes": {
@@ -430,13 +726,21 @@
     "highTrafficRoutes": []
   },
   "memory": {
-    "heapUsed": 20.15,
-    "heapTotal": 57.16,
+    "heapUsed": 20.16,
+    "heapTotal": 56.91,
     "external": 19.53,
     "arrayBuffers": 17.44,
-    "rss": 94.62
+    "rss": 95.39
   },
   "recommendations": [
+    {
+      "priority": "high",
+      "category": "database",
+      "collection": "reports",
+      "issue": "Too many indexes (26)",
+      "recommendation": "Optimize indexes, remove redundant ones",
+      "expectedImprovement": "40-60% write performance gain"
+    },
     {
       "priority": "medium",
       "category": "cache",

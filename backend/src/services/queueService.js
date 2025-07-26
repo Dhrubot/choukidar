@@ -679,7 +679,7 @@ const queueService = new QueueService();
 
 module.exports = {
   queueService,
-  
+  QueueService,
   // Quick functions with availability checks
   addJob: (queue, data, options) => {
     if (!queueService.isAvailable()) {
