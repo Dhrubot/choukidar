@@ -122,7 +122,7 @@ class DistributedQueueService {
 
     // Processors map for different job types
     this.processors = new Map();
-    
+
     // Statistics tracking
     this.stats = {
       processed: 0,
@@ -194,18 +194,18 @@ class DistributedQueueService {
       this.setupGracefulShutdown();
 
       this.isInitialized = true;
-      
+
       console.log('✅ Distributed queue system initialized successfully');
       console.log(`📊 Worker capacity: Emergency=${this.workerConfig.emergency.concurrency}, Standard=${this.workerConfig.standard.concurrency}`);
-      
+
       return { success: true, message: 'Distributed queue system ready for Bangladesh scale' };
 
     } catch (error) {
       console.error('❌ Failed to initialize distributed queue system:', error);
-      
+
       // Attempt graceful degradation
       await this.handleInitializationFailure(error);
-      
+
       throw error;
     }
   }
@@ -216,7 +216,7 @@ class DistributedQueueService {
   async testRedisConnection() {
     const Redis = require('ioredis');
     const testClient = new Redis(this.redisConfig);
-    
+
     try {
       await testClient.ping();
       console.log('✅ Redis connection test passed');
@@ -242,7 +242,7 @@ class DistributedQueueService {
       queue.on('failed', (job, error) => {
         console.error(`❌ Job failed in ${name}:`, { jobId: job.id, error: error.message });
         this.stats.failed++;
-        
+
         // Special handling for emergency reports
         if (name === 'emergencyReports') {
           this.handleEmergencyFailure(job, error);
@@ -253,11 +253,11 @@ class DistributedQueueService {
       queue.on('completed', (job, result) => {
         this.stats.processed++;
         this.stats.completed++;
-        
+
         if (name === 'emergencyReports') {
           this.stats.emergencyProcessed++;
         }
-        
+
         // Calculate average processing time
         const processingTime = Date.now() - job.timestamp;
         this.updateAverageProcessingTime(processingTime);
@@ -282,21 +282,21 @@ class DistributedQueueService {
     // Emergency report processor - immediate processing
     this.registerProcessor('emergencyReports', async (job) => {
       const { reportData, priority = 'critical' } = job.data;
-      
+
       console.log(`🚨 Processing emergency report: ${job.id} (Priority: ${priority})`);
-      
+
       // Import report processor dynamically to avoid circular dependencies
       const { reportProcessor } = require('../middleware/reportProcessor');
-      
+
       // Process with highest priority
       const result = await reportProcessor.processEmergencyReport(reportData, {
         priority: 'critical',
         skipQueue: true,
         emergencyMode: true
       });
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         reportId: result.reportId,
         processingTime: Date.now() - job.timestamp,
         priority: 'emergency'
@@ -306,18 +306,18 @@ class DistributedQueueService {
     // Standard report processor
     this.registerProcessor('standardReports', async (job) => {
       const { reportData } = job.data;
-      
+
       console.log(`📊 Processing standard report: ${job.id}`);
-      
+
       const { reportProcessor } = require('../middleware/reportProcessor');
-      
+
       const result = await reportProcessor.processStandardReport(reportData, {
         priority: 'normal',
         backgroundProcessing: true
       });
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         reportId: result.reportId,
         processingTime: Date.now() - job.timestamp
       };
@@ -326,9 +326,9 @@ class DistributedQueueService {
     // Background task processor
     this.registerProcessor('backgroundTasks', async (job) => {
       const { taskType, data } = job.data;
-      
+
       console.log(`⚙️ Processing background task: ${taskType} (Job: ${job.id})`);
-      
+
       switch (taskType) {
         case 'security_analysis':
           return await this.processSecurityAnalysis(data);
@@ -344,9 +344,9 @@ class DistributedQueueService {
     // Analytics processor
     this.registerProcessor('analyticsQueue', async (job) => {
       const { analyticsType, data } = job.data;
-      
+
       console.log(`📈 Processing analytics: ${analyticsType} (Job: ${job.id})`);
-      
+
       // Process analytics without blocking main operations
       return await this.processAnalytics(analyticsType, data);
     });
@@ -354,9 +354,9 @@ class DistributedQueueService {
     // Email processor
     this.registerProcessor('emailQueue', async (job) => {
       const { emailType, recipient, data } = job.data;
-      
+
       console.log(`📧 Sending email: ${emailType} to ${recipient} (Job: ${job.id})`);
-      
+
       const { emailService } = require('./emailService');
       return await emailService.sendEmail(emailType, recipient, data);
     });
@@ -364,9 +364,9 @@ class DistributedQueueService {
     // Device analysis processor
     this.registerProcessor('deviceAnalysis', async (job) => {
       const { deviceId, analysisType } = job.data;
-      
+
       console.log(`🔍 Analyzing device: ${deviceId} (Type: ${analysisType}, Job: ${job.id})`);
-      
+
       const { deviceFingerprintProcessor } = require('../middleware/deviceFingerprintProcessor');
       return await deviceFingerprintProcessor.analyzeDevice(deviceId, analysisType);
     });
@@ -394,7 +394,7 @@ class DistributedQueueService {
   startWorkers() {
     Object.entries(this.queues).forEach(([name, queue]) => {
       const processor = this.processors.get(name);
-      
+
       if (!processor) {
         console.warn(`⚠️ No processor found for queue: ${name}`);
         return;
@@ -406,7 +406,7 @@ class DistributedQueueService {
 
       // Start workers with concurrency
       queue.process(config.concurrency, processor);
-      
+
       console.log(`🏃 Started ${config.concurrency} workers for ${name} queue (Priority: ${config.priority})`);
     });
   }
@@ -422,12 +422,12 @@ class DistributedQueueService {
 
       // Determine priority and options based on job type
       const jobOptions = this.getJobOptions(queueName, options);
-      
+
       // Add job to queue
       const job = await this.queues[queueName].add(jobData, jobOptions);
-      
+
       console.log(`➕ Job added to ${queueName}: ${job.id}`);
-      
+
       return {
         success: true,
         jobId: job.id,
@@ -437,12 +437,12 @@ class DistributedQueueService {
 
     } catch (error) {
       console.error(`❌ Failed to add job to ${queueName}:`, error);
-      
+
       // Attempt fallback processing for critical jobs
       if (queueName === 'emergencyReports') {
         return await this.handleEmergencyJobFailure(jobData, error);
       }
-      
+
       throw error;
     }
   }
@@ -452,27 +452,27 @@ class DistributedQueueService {
    */
   async routeJob(jobData, jobType, metadata = {}) {
     const { priority, genderSensitive, urgency } = metadata;
-    
+
     // Emergency routing for female safety
     if (genderSensitive === true || urgency === 'critical' || priority === 'emergency') {
       return await this.addJob('emergencyReports', jobData, { priority: 1 });
     }
-    
+
     // Standard report routing
     if (jobType === 'safety_report' || jobType === 'incident_report') {
       return await this.addJob('standardReports', jobData, { priority: 2 });
     }
-    
+
     // Background task routing
     if (jobType === 'analysis' || jobType === 'enrichment') {
       return await this.addJob('backgroundTasks', jobData, { priority: 3 });
     }
-    
+
     // Analytics routing
     if (jobType === 'analytics' || jobType === 'metrics') {
       return await this.addJob('analyticsQueue', jobData, { priority: 4 });
     }
-    
+
     // Default to standard queue
     return await this.addJob('standardReports', jobData, { priority: 3 });
   }
@@ -482,7 +482,7 @@ class DistributedQueueService {
    */
   async getQueueStats() {
     const stats = {};
-    
+
     for (const [name, queue] of Object.entries(this.queues)) {
       try {
         const [waiting, active, completed, failed, delayed] = await Promise.all([
@@ -537,14 +537,44 @@ class DistributedQueueService {
       await testQueue.client.ping();
       health.redis = 'connected';
 
-      // Check each queue
+      // Check each queue (FIXED: Bull queues don't have checkHealth method)
       for (const [name, queue] of Object.entries(this.queues)) {
         try {
-          const queueHealth = await queue.checkHealth();
-          health.queues[name] = {
+          // Use Bull queue's built-in status checks instead of checkHealth
+          const [waiting, active, completed, failed, delayed] = await Promise.all([
+            queue.getWaiting(),
+            queue.getActive(),
+            queue.getCompleted(),
+            queue.getFailed(),
+            queue.getDelayed()
+          ]);
+
+          // Check if queue is responsive by testing basic operations
+          const queueHealth = {
             status: 'healthy',
-            connection: 'active'
+            connection: 'active',
+            counts: {
+              waiting: waiting.length,
+              active: active.length,
+              completed: completed.length,
+              failed: failed.length,
+              delayed: delayed.length
+            }
           };
+
+          // Consider queue unhealthy if there are too many failed jobs
+          if (failed.length > 100) {
+            queueHealth.status = 'degraded';
+            queueHealth.warning = `High failure count: ${failed.length}`;
+          }
+
+          // Consider queue critical if it's completely stalled
+          if (active.length === 0 && waiting.length > 50) {
+            queueHealth.status = 'degraded';
+            queueHealth.warning = `Queue appears stalled: ${waiting.length} waiting, 0 active`;
+          }
+
+          health.queues[name] = queueHealth;
 
           // Check if workers are responsive
           const workerKey = this.getWorkerConfigKey(name);
@@ -564,8 +594,12 @@ class DistributedQueueService {
 
       // Overall health determination
       const unhealthyQueues = Object.values(health.queues).filter(q => q.status === 'unhealthy').length;
+      const degradedQueues = Object.values(health.queues).filter(q => q.status === 'degraded').length;
+
       if (unhealthyQueues > 0) {
         health.status = unhealthyQueues >= Object.keys(this.queues).length / 2 ? 'critical' : 'degraded';
+      } else if (degradedQueues > 0) {
+        health.status = 'degraded';
       }
 
       return health;
@@ -587,12 +621,12 @@ class DistributedQueueService {
     // Health check every 30 seconds
     this.healthCheckInterval = setInterval(async () => {
       const health = await this.healthCheck();
-      
+
       if (health.status !== 'healthy') {
         console.warn('⚠️ Queue system health issue:', health);
         productionLogger.warn('Queue health degraded', health);
       }
-      
+
       // Log stats every 5 minutes
       if (Date.now() % (5 * 60 * 1000) < 30000) {
         const stats = await this.getQueueStats();
@@ -612,14 +646,14 @@ class DistributedQueueService {
     setInterval(() => {
       const now = Date.now();
       const timeSinceReset = now - this.stats.lastResetTime;
-      
+
       if (timeSinceReset > 0) {
         const throughput = (this.stats.processed / timeSinceReset) * 1000 * 60; // per minute
-        
+
         if (process.env.NODE_ENV === 'development') {
           console.log(`📈 Processing throughput: ${throughput.toFixed(2)} jobs/minute`);
         }
-        
+
         // Reset stats every hour
         if (timeSinceReset > 60 * 60 * 1000) {
           this.resetStats();
@@ -634,11 +668,11 @@ class DistributedQueueService {
   setupGracefulShutdown() {
     const gracefulShutdown = async (signal) => {
       console.log(`🔄 Received ${signal}, starting graceful shutdown...`);
-      
+
       if (this.healthCheckInterval) {
         clearInterval(this.healthCheckInterval);
       }
-      
+
       // Close all queues
       const closePromises = Object.entries(this.queues).map(async ([name, queue]) => {
         try {
@@ -648,7 +682,7 @@ class DistributedQueueService {
           console.error(`❌ Error closing queue ${name}:`, error);
         }
       });
-      
+
       await Promise.all(closePromises);
       console.log('✅ All queues closed. Distributed queue system shutdown complete.');
     };
@@ -704,7 +738,7 @@ class DistributedQueueService {
 
   async handleEmergencyFailure(job, error) {
     console.error(`🚨 CRITICAL: Emergency report failed: ${job.id}`, error);
-    
+
     // Immediate fallback processing
     try {
       const { reportProcessor } = require('../middleware/reportProcessor');
@@ -722,11 +756,11 @@ class DistributedQueueService {
 
   async handleEmergencyJobFailure(jobData, error) {
     console.error('🚨 CRITICAL: Cannot queue emergency report, processing immediately');
-    
+
     try {
       const { reportProcessor } = require('../middleware/reportProcessor');
       const result = await reportProcessor.processEmergencyFallback(jobData);
-      
+
       return {
         success: true,
         fallback: true,
@@ -761,13 +795,13 @@ class DistributedQueueService {
 
   async handleInitializationFailure(error) {
     console.warn('⚠️ Attempting graceful degradation after initialization failure');
-    
+
     // Import fallback queue service
     try {
       const { QueueService } = require('./queueService');
       this.fallbackQueue = new QueueService();
       await this.fallbackQueue.initialize();
-      
+
       console.log('✅ Fallback to memory-based queue service');
     } catch (fallbackError) {
       console.error('❌ Fallback queue initialization also failed:', fallbackError);

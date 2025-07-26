@@ -22,7 +22,7 @@ class DistributedQueueInitializer {
       performanceTests: false,
       errors: []
     };
-    
+
     this.startTime = Date.now();
   }
 
@@ -125,11 +125,11 @@ class DistributedQueueInitializer {
     try {
       // Initialize Redis cluster connections
       const result = await redisCluster.initialize();
-      
+
       if (result.success) {
         console.log('  ✅ Redis cluster initialized successfully');
         console.log(`  📊 Active connections: ${result.connections.join(', ')}`);
-        
+
         // Test all connections
         const connectionTests = await redisCluster.testAllConnections();
         const failedConnections = Object.entries(connectionTests)
@@ -150,7 +150,7 @@ class DistributedQueueInitializer {
     } catch (error) {
       console.error('  ❌ Redis cluster initialization failed:', error.message);
       this.initializationResults.errors.push(`Redis: ${error.message}`);
-      
+
       // Check if we can continue without Redis clustering
       if (error.message.includes('ECONNREFUSED')) {
         console.log('  💡 QUICK FIX:');
@@ -158,7 +158,7 @@ class DistributedQueueInitializer {
         console.log('     2. Start Redis: redis-server');
         console.log('     3. Run this script again');
       }
-      
+
       throw error;
     }
   }
@@ -171,11 +171,11 @@ class DistributedQueueInitializer {
 
     try {
       const result = await distributedQueueService.initialize();
-      
+
       if (result.success) {
         console.log('  ✅ Distributed queue service initialized');
         console.log('  📊 Active queues: Emergency, Standard, Background, Analytics, Email, Device');
-        
+
         // Get queue statistics
         const stats = await distributedQueueService.getQueueStats();
         console.log('  📈 Initial queue stats:', JSON.stringify(stats.global, null, 2));
@@ -201,11 +201,11 @@ class DistributedQueueInitializer {
 
     try {
       const result = await reportProcessor.initialize();
-      
+
       if (result.success) {
         console.log('  ✅ Report processor initialized for Bangladesh scale');
         console.log('  🎯 Processing tiers: Emergency → Standard → Background → Analytics');
-        
+
         // Display processor statistics
         const stats = reportProcessor.getStatistics();
         console.log('  📊 Processor status:', stats.queueStatus);
@@ -262,11 +262,18 @@ class DistributedQueueInitializer {
       console.log('  🔍 Testing report processing pipeline...');
       try {
         const testReport = {
-          type: 'test',
-          description: 'Validation test report',
+          type: 'eve_teasing',  // FIXED: Use valid enum value
+          description: 'Validation test report for distributed queue system',
           location: { coordinates: [90.4125, 23.8103] },
-          genderSensitive: false,
-          severity: 'low'
+          severity: 3,  // FIXED: Use number instead of string
+          genderSensitive: true,
+          anonymous: true,
+          submittedBy: {
+            userType: 'anonymous',
+            deviceFingerprint: 'test_device_123',
+            isAnonymous: true
+          },
+          // Remove invalid status field - let the model set default
         };
 
         const result = await reportProcessor.processReport(testReport, { skipQueue: true });
@@ -276,14 +283,13 @@ class DistributedQueueInitializer {
         testResults.reportProcessing = false;
         console.log(`    ❌ Report processing test failed: ${reportError.message}`);
       }
-
       // Calculate overall validation result
       const passedTests = Object.values(testResults).filter(Boolean).length;
       const totalTests = Object.keys(testResults).length;
       const validationSuccess = passedTests >= totalTests * 0.75; // 75% pass rate
 
       console.log(`  📊 Validation Results: ${passedTests}/${totalTests} tests passed`);
-      
+
       this.initializationResults.validationTests = validationSuccess;
       this.initializationResults.testResults = testResults;
 
@@ -311,7 +317,7 @@ class DistributedQueueInitializer {
       console.log('  📊 Testing queue throughput...');
       const throughputStart = Date.now();
       const batchSize = 100;
-      
+
       const batchPromises = [];
       for (let i = 0; i < batchSize; i++) {
         batchPromises.push(
@@ -337,7 +343,7 @@ class DistributedQueueInitializer {
       // Test 2: Processing latency
       console.log('  ⏱️ Testing processing latency...');
       const latencyTests = [];
-      
+
       for (let i = 0; i < 10; i++) {
         const start = Date.now();
         try {
@@ -362,7 +368,7 @@ class DistributedQueueInitializer {
       // Test 3: Memory usage
       console.log('  💾 Testing memory usage...');
       const memoryBefore = process.memoryUsage();
-      
+
       // Create a burst of jobs to test memory handling
       const memoryTestPromises = [];
       for (let i = 0; i < 500; i++) {
@@ -370,13 +376,13 @@ class DistributedQueueInitializer {
           distributedQueueService.addJob('backgroundTasks', {
             testData: `memory_test_${i}`,
             largePayload: 'x'.repeat(1000) // 1KB payload
-          }).catch(() => {}) // Ignore individual failures
+          }).catch(() => { }) // Ignore individual failures
         );
       }
 
       await Promise.all(memoryTestPromises);
       const memoryAfter = process.memoryUsage();
-      
+
       performanceResults.memory = {
         heapUsedMB: Math.round((memoryAfter.heapUsed - memoryBefore.heapUsed) / 1024 / 1024),
         heapTotalMB: Math.round(memoryAfter.heapTotal / 1024 / 1024),
@@ -404,7 +410,7 @@ class DistributedQueueInitializer {
    */
   calculatePerformanceScore(results) {
     let score = 0;
-    
+
     // Throughput score (0-40 points)
     const throughput = results.throughput?.jobsPerSecond || 0;
     if (throughput >= 1000) score += 40;
@@ -436,11 +442,11 @@ class DistributedQueueInitializer {
    */
   displayResults() {
     const totalTime = Date.now() - this.startTime;
-    
+
     console.log('\n' + '='.repeat(80));
     console.log('🎉 BANGLADESH-SCALE QUEUE SYSTEM INITIALIZATION COMPLETE');
     console.log('='.repeat(80));
-    
+
     // Success/failure summary
     console.log('\n📋 INITIALIZATION RESULTS:');
     console.log(`   Redis Cluster: ${this.initializationResults.redisCluster ? '✅ PASS' : '❌ FAIL'}`);
@@ -470,7 +476,7 @@ class DistributedQueueInitializer {
       console.log('   • Processing Speed: 5-12s → <2s (80% faster)');
       console.log('   • Queue Capacity: Single-process → Distributed cluster');
       console.log('   • Female Safety: <5s emergency response time');
-      
+
       console.log('\n📋 NEXT STEPS:');
       console.log('   1. Restart your server to activate distributed queues');
       console.log('   2. Run load test: npm run test:heavy-normal');
@@ -496,7 +502,7 @@ class DistributedQueueInitializer {
       console.log('⚠️ PARTIAL INITIALIZATION - Some features may be limited');
       console.log('💡 Check errors above and retry initialization');
     }
-    
+
     console.log('='.repeat(80) + '\n');
   }
 
@@ -505,16 +511,16 @@ class DistributedQueueInitializer {
    */
   async attemptGracefulDegradation() {
     console.log('\n🔄 Attempting graceful degradation...');
-    
+
     try {
       // Try to maintain basic functionality
       console.log('  📋 Checking what systems are functional...');
-      
+
       // Test MongoDB connection
       if (mongoose.connection.readyState === 1) {
         console.log('  ✅ MongoDB connection maintained');
       }
-      
+
       // Check if any Redis connections work
       try {
         const redis = require('redis');
@@ -528,10 +534,10 @@ class DistributedQueueInitializer {
       } catch (redisError) {
         console.log('  ❌ Redis completely unavailable');
       }
-      
+
       // Initialize fallback systems
       console.log('  🔧 Initializing fallback systems...');
-      
+
       try {
         const { QueueService } = require('./src/services/queueService');
         const fallbackQueue = new QueueService();
@@ -540,10 +546,10 @@ class DistributedQueueInitializer {
       } catch (fallbackError) {
         console.log('  ❌ Fallback queue system failed');
       }
-      
+
       console.log('\n✅ Graceful degradation completed');
       console.log('⚠️ System will run with reduced capacity');
-      
+
     } catch (error) {
       console.error('❌ Graceful degradation failed:', error);
     }
@@ -566,14 +572,14 @@ class DistributedQueueInitializer {
    */
   async cleanup() {
     console.log('🔄 Cleaning up distributed queue initializer...');
-    
+
     try {
       // Close any test connections
       if (mongoose.connection.readyState === 1) {
         await mongoose.connection.close();
         console.log('✅ Test MongoDB connection closed');
       }
-      
+
       console.log('✅ Cleanup completed');
     } catch (error) {
       console.error('❌ Cleanup error:', error);
@@ -586,39 +592,39 @@ class DistributedQueueInitializer {
  */
 async function runDistributedQueueInitialization() {
   const initializer = new DistributedQueueInitializer();
-  
+
   try {
     console.log('\n🔌 Connecting to MongoDB for initialization...');
-    
+
     if (!process.env.MONGODB_URI) {
       throw new Error('MONGODB_URI environment variable is required');
     }
-    
+
     await mongoose.connect(process.env.MONGODB_URI, {
       maxPoolSize: 10,
       socketTimeoutMS: 45000,
       serverSelectionTimeoutMS: 10000
     });
-    
+
     console.log('✅ Connected to MongoDB\n');
-    
+
     // Run the initialization
     const results = await initializer.initialize();
-    
+
     return results;
-    
+
   } catch (error) {
     console.error('\n💥 Distributed queue initialization failed:', error.message);
-    
+
     if (error.message.includes('ECONNREFUSED')) {
       console.log('\n🔧 QUICK FIXES:');
       console.log('   Redis: brew install redis && redis-server');
       console.log('   MongoDB: Make sure MongoDB is running');
       console.log('   Environment: Check your .env file');
     }
-    
+
     process.exit(1);
-    
+
   } finally {
     // Cleanup
     await initializer.cleanup();
@@ -633,7 +639,7 @@ if (require.main === module) {
   });
 }
 
-module.exports = { 
-  DistributedQueueInitializer, 
-  runDistributedQueueInitialization 
+module.exports = {
+  DistributedQueueInitializer,
+  runDistributedQueueInitialization
 };

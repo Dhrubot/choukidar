@@ -10,7 +10,7 @@ class ReportProcessor {
     this.isInitialized = false;
     this.distributedQueue = null;
     this.fallbackQueue = null;
-    
+
     // Processing statistics
     this.stats = {
       processed: 0,
@@ -31,7 +31,7 @@ class ReportProcessor {
         minLng: 88.01200,
         maxLng: 92.673668
       },
-      
+
       // Priority zones within Bangladesh
       priorityZones: [
         { name: 'Dhaka', lat: 23.8103, lng: 90.4125, radius: 50 },
@@ -40,7 +40,7 @@ class ReportProcessor {
         { name: 'Rajshahi', lat: 24.3636, lng: 88.6241, radius: 25 },
         { name: 'Khulna', lat: 22.8456, lng: 89.5403, radius: 25 }
       ],
-      
+
       // Female safety zones (universities, markets, transport hubs)
       femaleSafetyZones: [
         { name: 'Dhaka University Area', lat: 23.7269, lng: 90.3951, radius: 5 },
@@ -58,7 +58,7 @@ class ReportProcessor {
         queue: 'emergencyReports',
         description: 'Female safety, violence, immediate threats'
       },
-      
+
       // HIGH: Standard safety reports
       standard: {
         priority: 2,
@@ -66,7 +66,7 @@ class ReportProcessor {
         queue: 'standardReports',
         description: 'Safety concerns, harassment, theft'
       },
-      
+
       // MEDIUM: Background analysis
       background: {
         priority: 3,
@@ -74,7 +74,7 @@ class ReportProcessor {
         queue: 'backgroundTasks',
         description: 'Security analysis, trend detection'
       },
-      
+
       // LOW: Analytics and insights
       analytics: {
         priority: 4,
@@ -94,26 +94,26 @@ class ReportProcessor {
 
       // Initialize distributed queue service
       await this.initializeDistributedQueue();
-      
+
       // Initialize fallback mechanisms
       await this.initializeFallbackSystems();
-      
+
       // Setup monitoring
       this.setupMonitoring();
-      
+
       this.isInitialized = true;
-      
+
       console.log('✅ Report processor initialized for Bangladesh scale');
       console.log(`📊 Processing tiers: Emergency, Standard, Background, Analytics`);
-      
+
       return { success: true, message: 'Report processor ready for 25,000+ users' };
 
     } catch (error) {
       console.error('❌ Report processor initialization failed:', error);
-      
+
       // Attempt graceful degradation
       await this.initializeFallbackMode();
-      
+
       throw error;
     }
   }
@@ -124,14 +124,14 @@ class ReportProcessor {
   async initializeDistributedQueue() {
     try {
       const { distributedQueueService } = require('../services/distributedQueueService');
-      
+
       if (!distributedQueueService.isInitialized) {
         await distributedQueueService.initialize();
       }
-      
+
       this.distributedQueue = distributedQueueService;
       console.log('✅ Distributed queue service connected');
-      
+
     } catch (error) {
       console.warn('⚠️ Distributed queue unavailable, will use fallback:', error.message);
       this.distributedQueue = null;
@@ -146,39 +146,51 @@ class ReportProcessor {
       // Import existing queue service as fallback
       const { QueueService } = require('../services/queueService');
       this.fallbackQueue = new QueueService();
-      
+
       if (!this.fallbackQueue.isInitialized) {
         await this.fallbackQueue.initialize();
       }
-      
+
       console.log('✅ Fallback queue system ready');
-      
+
     } catch (error) {
       console.warn('⚠️ Fallback queue initialization failed:', error.message);
       this.fallbackQueue = null;
     }
   }
 
+  // Get a valid type from the original data or use a safe default
+  getValidType(originalType) {
+    const validTypes = [
+      'chadabaji', 'teen_gang', 'chintai', 'political_harassment', 'other',
+      'eve_teasing', 'stalking', 'inappropriate_touch', 'verbal_harassment',
+      'unsafe_transport', 'workplace_harassment', 'domestic_incident', 'unsafe_area_women',
+      'emergency'  // You added this
+    ];
+
+    return validTypes.includes(originalType) ? originalType : 'emergency';
+  };
+
   /**
    * MAIN ENTRY POINT: Process any report with intelligent routing
    */
   async processReport(reportData, options = {}) {
     const startTime = Date.now();
-    
+
     try {
       console.log(`📊 Processing report: ${reportData._id || 'new'}`);
-      
+
       // 1. Analyze report and determine processing tier
       const analysis = await this.analyzeReport(reportData);
-      
+
       // 2. Route to appropriate processing tier
       const result = await this.routeToProcessingTier(reportData, analysis, options);
-      
+
       // 3. Update statistics
       this.updateProcessingStats(analysis.tier, Date.now() - startTime);
-      
+
       console.log(`✅ Report processed successfully: ${analysis.tier} tier (${Date.now() - startTime}ms)`);
-      
+
       return {
         success: true,
         reportId: result.reportId || reportData._id,
@@ -191,12 +203,12 @@ class ReportProcessor {
     } catch (error) {
       console.error('❌ Report processing failed:', error);
       this.stats.failed++;
-      
+
       // Attempt emergency fallback for critical reports
       if (this.isCriticalReport(reportData)) {
         return await this.processEmergencyFallback(reportData);
       }
-      
+
       throw error;
     }
   }
@@ -285,7 +297,7 @@ class ReportProcessor {
    */
   async routeToProcessingTier(reportData, analysis, options = {}) {
     const { tier, priority } = analysis;
-    
+
     // Force queue bypass for emergency processing
     if (options.skipQueue || tier === 'emergency') {
       return await this.processDirectly(reportData, analysis, options);
@@ -311,7 +323,7 @@ class ReportProcessor {
   async processViaDistributedQueue(reportData, analysis, options = {}) {
     const { tier } = analysis;
     const queueName = this.processingTiers[tier].queue;
-    
+
     try {
       // Prepare job data
       const jobData = {
@@ -353,12 +365,12 @@ class ReportProcessor {
 
     } catch (error) {
       console.error(`❌ Distributed queue processing failed for ${tier}:`, error);
-      
+
       // Fallback to direct processing for emergency reports
       if (tier === 'emergency') {
         return await this.processDirectly(reportData, analysis, options);
       }
-      
+
       throw error;
     }
   }
@@ -368,11 +380,11 @@ class ReportProcessor {
    */
   async processViaFallbackQueue(reportData, analysis, options = {}) {
     const { tier } = analysis;
-    
+
     try {
       // Map tier to fallback queue type
       const queueType = this.mapTierToFallbackQueue(tier);
-      
+
       const result = await this.fallbackQueue.addJob(queueType, {
         reportData: this.sanitizeReportData(reportData),
         analysis: analysis.summary,
@@ -401,12 +413,12 @@ class ReportProcessor {
    */
   async processDirectly(reportData, analysis, options = {}) {
     const { tier } = analysis;
-    
+
     console.log(`⚡ Processing report directly: ${tier} tier`);
-    
+
     try {
       let result;
-      
+
       switch (tier) {
         case 'emergency':
           result = await this.processEmergencyReport(reportData, options);
@@ -443,34 +455,34 @@ class ReportProcessor {
    */
   async processEmergencyReport(reportData, options = {}) {
     const startTime = Date.now();
-    
+
     try {
       console.log(`🚨 EMERGENCY: Processing critical report ${reportData._id}`);
-      
+
       // 1. Immediate validation and sanitization
       const sanitizedData = await this.sanitizeReportData(reportData);
-      
+
       // 2. Enhanced security analysis for emergency reports
       const securityAnalysis = await this.performEmergencySecurityAnalysis(sanitizedData);
-      
+
       // 3. Save to database with highest priority
       const savedReport = await this.saveReportWithPriority(sanitizedData, 'emergency');
-      
+
       // 4. Immediate notification system
       await this.triggerEmergencyNotifications(savedReport);
-      
+
       // 5. Real-time WebSocket updates
       await this.broadcastEmergencyAlert(savedReport);
-      
+
       // 6. Queue background analysis (non-blocking)
       this.queueBackgroundAnalysis(savedReport, { priority: 'high' });
-      
+
       const processingTime = Date.now() - startTime;
-      
+
       console.log(`✅ Emergency report processed in ${processingTime}ms`);
-      
+
       this.stats.emergency++;
-      
+
       return {
         success: true,
         reportId: savedReport._id,
@@ -482,24 +494,28 @@ class ReportProcessor {
 
     } catch (error) {
       console.error('❌ Emergency report processing failed:', error);
-      
+
       // Emergency fallback: Save with minimal processing
       try {
         const Report = require('../models/Report');
         const savedReport = await Report.create({
-          ...reportData,
-          status: 'emergency_fallback',
+          type: this.getValidType(reportData.type),
+          description: reportData.description || 'Emergency fallback report',
+          location: reportData.location || { coordinates: [90.4125, 23.8103] },
+          severity: typeof reportData.severity === 'number' ? reportData.severity : 3,
+          genderSensitive: reportData.genderSensitive || false,
+          status: 'flagged',
           processingErrors: [error.message],
           timestamp: new Date()
         });
-        
+
         return {
           success: true,
           reportId: savedReport._id,
           fallback: true,
           warning: 'Emergency fallback processing used'
         };
-        
+
       } catch (fallbackError) {
         console.error('❌ Emergency fallback also failed:', fallbackError);
         throw new Error(`Emergency processing failed: ${error.message}`);
@@ -512,34 +528,34 @@ class ReportProcessor {
    */
   async processStandardReport(reportData, options = {}) {
     const startTime = Date.now();
-    
+
     try {
       console.log(`📊 STANDARD: Processing safety report ${reportData._id}`);
-      
+
       // 1. Standard validation and sanitization
       const sanitizedData = await this.sanitizeReportData(reportData);
-      
+
       // 2. Security and fraud analysis
       const securityAnalysis = await this.performStandardSecurityAnalysis(sanitizedData);
-      
+
       // 3. Save to database with standard priority
       const savedReport = await this.saveReportWithPriority(sanitizedData, 'standard');
-      
+
       // 4. Standard notification system
       await this.triggerStandardNotifications(savedReport);
-      
+
       // 5. WebSocket updates for map
       await this.broadcastMapUpdate(savedReport);
-      
+
       // 6. Queue background analysis
       this.queueBackgroundAnalysis(savedReport, { priority: 'normal' });
-      
+
       const processingTime = Date.now() - startTime;
-      
+
       console.log(`✅ Standard report processed in ${processingTime}ms`);
-      
+
       this.stats.standard++;
-      
+
       return {
         success: true,
         reportId: savedReport._id,
@@ -559,39 +575,39 @@ class ReportProcessor {
    */
   async processBackgroundAnalysis(reportData, options = {}) {
     const startTime = Date.now();
-    
+
     try {
       console.log(`⚙️ BACKGROUND: Processing analysis for ${reportData._id}`);
-      
+
       const analysisResults = {};
-      
+
       // 1. Deep security analysis
       if (options.includeSecurityAnalysis !== false) {
         analysisResults.security = await this.performDeepSecurityAnalysis(reportData);
       }
-      
+
       // 2. Location enrichment
       if (reportData.location?.coordinates) {
         analysisResults.location = await this.enrichLocationData(reportData.location.coordinates);
       }
-      
+
       // 3. Trend analysis
       analysisResults.trends = await this.analyzeTrends(reportData);
-      
+
       // 4. Device analysis
       if (reportData.deviceFingerprint) {
         analysisResults.device = await this.analyzeDeviceFingerprint(reportData.deviceFingerprint);
       }
-      
+
       // 5. Update report with analysis results
       await this.updateReportWithAnalysis(reportData._id, analysisResults);
-      
+
       const processingTime = Date.now() - startTime;
-      
+
       console.log(`✅ Background analysis completed in ${processingTime}ms`);
-      
+
       this.stats.background++;
-      
+
       return {
         success: true,
         reportId: reportData._id,
@@ -610,30 +626,30 @@ class ReportProcessor {
    */
   async processAnalytics(reportData, options = {}) {
     const startTime = Date.now();
-    
+
     try {
       console.log(`📈 ANALYTICS: Processing metrics for ${reportData._id}`);
-      
+
       // 1. Update aggregation counters
       await this.updateAnalyticsCounters(reportData);
-      
+
       // 2. Update trend data
       await this.updateTrendData(reportData);
-      
+
       // 3. Update safety score for area
       if (reportData.location?.coordinates) {
         await this.updateAreaSafetyScore(reportData.location.coordinates, reportData);
       }
-      
+
       // 4. Update female safety metrics
       if (reportData.genderSensitive) {
         await this.updateFemaleSafetyMetrics(reportData);
       }
-      
+
       const processingTime = Date.now() - startTime;
-      
+
       console.log(`✅ Analytics processing completed in ${processingTime}ms`);
-      
+
       return {
         success: true,
         reportId: reportData._id,
@@ -652,22 +668,22 @@ class ReportProcessor {
    */
   async processEmergencyFallback(reportData) {
     console.log(`🚨 FALLBACK: Emergency processing for ${reportData._id || 'new'}`);
-    
+
     try {
       // Minimal processing to ensure report is saved
       const Report = require('../models/Report');
-      
+
       const minimalReport = {
-        type: reportData.type || 'emergency',
+        type: this.getValidType(reportData.type),
         description: reportData.description || 'Emergency report',
         location: reportData.location || { coordinates: [90.4125, 23.8103] }, // Dhaka center
         genderSensitive: reportData.genderSensitive || true,
-        severity: reportData.severity || 'high',
-        status: 'emergency_fallback',
+        severity: reportData.severity || 3,
+        status: 'flagged',
         timestamp: new Date(),
         processingMode: 'emergency_fallback',
         securityScore: 50, // Default moderate score
-        
+
         // Add minimal security flags
         securityFlags: {
           emergencyFallback: true,
@@ -675,18 +691,18 @@ class ReportProcessor {
           timestamp: new Date()
         }
       };
-      
+
       const savedReport = await Report.create(minimalReport);
-      
+
       // Trigger minimal notifications
       try {
         await this.triggerMinimalNotifications(savedReport);
       } catch (notificationError) {
         console.warn('⚠️ Emergency fallback notification failed:', notificationError);
       }
-      
+
       console.log(`✅ Emergency fallback completed: ${savedReport._id}`);
-      
+
       return {
         success: true,
         reportId: savedReport._id,
@@ -707,12 +723,12 @@ class ReportProcessor {
    */
   isWithinBangladesh(coordinates) {
     if (!coordinates || coordinates.length !== 2) return false;
-    
+
     const [lng, lat] = coordinates;
     const bounds = this.bangladeshConfig.bounds;
-    
-    return lat >= bounds.minLat && lat <= bounds.maxLat && 
-           lng >= bounds.minLng && lng <= bounds.maxLng;
+
+    return lat >= bounds.minLat && lat <= bounds.maxLat &&
+      lng >= bounds.minLng && lng <= bounds.maxLng;
   }
 
   /**
@@ -720,7 +736,7 @@ class ReportProcessor {
    */
   analyzeLocation(coordinates) {
     if (!coordinates || coordinates.length !== 2) return null;
-    
+
     const [lng, lat] = coordinates;
     const analysis = {
       inPriorityZone: false,
@@ -728,7 +744,7 @@ class ReportProcessor {
       distanceToZone: null,
       inFemaleSafetyZone: false
     };
-    
+
     // Check priority zones
     for (const zone of this.bangladeshConfig.priorityZones) {
       const distance = this.calculateDistance(lat, lng, zone.lat, zone.lng);
@@ -739,7 +755,7 @@ class ReportProcessor {
         break;
       }
     }
-    
+
     // Check female safety zones
     for (const zone of this.bangladeshConfig.femaleSafetyZones) {
       const distance = this.calculateDistance(lat, lng, zone.lat, zone.lng);
@@ -748,7 +764,7 @@ class ReportProcessor {
         break;
       }
     }
-    
+
     return analysis;
   }
 
@@ -758,17 +774,17 @@ class ReportProcessor {
   isFemaleSafetyReport(reportData) {
     // Explicit gender sensitive flag
     if (reportData.genderSensitive === true) return true;
-    
+
     // Check description for female safety keywords
     const femaleSafetyKeywords = [
       'harassment', 'stalking', 'assault', 'abuse', 'threat', 'inappropriate',
       'uncomfortable', 'unsafe', 'scared', 'followed', 'touched', 'commented',
       'মহিলা', 'নারী', 'হয়রানি', 'অনিরাপদ' // Bengali keywords
     ];
-    
+
     const description = (reportData.description || '').toLowerCase();
-    
-    return femaleSafetyKeywords.some(keyword => 
+
+    return femaleSafetyKeywords.some(keyword =>
       description.includes(keyword.toLowerCase())
     );
   }
@@ -782,23 +798,53 @@ class ReportProcessor {
       'emergency', 'help', 'police', 'urgent', 'danger', 'threat',
       'হিংসা', 'আক্রমণ', 'অস্ত্র', 'বিপদ' // Bengali keywords
     ];
-    
+
     const description = (reportData.description || '').toLowerCase();
     const severity = reportData.severity || '';
-    
-    return violenceKeywords.some(keyword => 
+
+    return violenceKeywords.some(keyword =>
       description.includes(keyword.toLowerCase())
     ) || severity === 'critical' || severity === 'high';
+  }
+
+  /**
+    * ADDED:Check if report is a safety report
+  */
+
+  isSafetyReport(reportData) {
+    const safetyKeywords = [
+      'safety', 'unsafe', 'danger', 'concern', 'risk', 'hazard',
+      'incident', 'problem', 'issue', 'warning', 'alert',
+      'নিরাপত্তা', 'বিপদ', 'ঝুঁকি', 'সমস্যা' // Bengali keywords
+    ];
+
+    const description = (reportData.description || '').toLowerCase();
+    const type = (reportData.type || '').toLowerCase();
+
+    // Check if it's explicitly a safety-related type
+    const safetyTypes = [
+      'theft', 'robbery', 'harassment', 'assault', 'vandalism',
+      'suspicious_activity', 'unsafe_area', 'poor_lighting'
+    ];
+
+    if (safetyTypes.includes(type)) {
+      return true;
+    }
+
+    // Check description for safety keywords
+    return safetyKeywords.some(keyword =>
+      description.includes(keyword.toLowerCase())
+    );
   }
 
   /**
    * Check if report requires background analysis
    */
   requiresBackgroundAnalysis(reportData) {
-    return reportData.deviceFingerprint || 
-           reportData.location?.coordinates ||
-           reportData.severity === 'high' ||
-           reportData.genderSensitive;
+    return reportData.deviceFingerprint ||
+      reportData.location?.coordinates ||
+      reportData.severity === 'high' ||
+      reportData.genderSensitive;
   }
 
   /**
@@ -812,9 +858,9 @@ class ReportProcessor {
    * Check if report is critical
    */
   isCriticalReport(reportData) {
-    return this.isFemaleSafetyReport(reportData) || 
-           this.isViolenceReport(reportData) ||
-           reportData.severity === 'critical';
+    return this.isFemaleSafetyReport(reportData) ||
+      this.isViolenceReport(reportData) ||
+      reportData.severity === 'critical';
   }
 
   // ===== PROCESSING HELPER METHODS =====
@@ -834,14 +880,14 @@ class ReportProcessor {
       deviceFingerprint: reportData.deviceFingerprint,
       userContext: reportData.userContext
     };
-    
+
     // Remove any potential XSS or injection content
     if (sanitized.description) {
       sanitized.description = sanitized.description
         .replace(/<[^>]*>/g, '') // Remove HTML tags
         .substring(0, 1000); // Limit length
     }
-    
+
     return sanitized;
   }
 
@@ -855,7 +901,7 @@ class ReportProcessor {
       background: 5000,  // 5 seconds
       analytics: 30000   // 30 seconds
     };
-    
+
     return delays[tier] || 1000;
   }
 
@@ -869,7 +915,7 @@ class ReportProcessor {
       background: 'analytics',
       analytics: 'analytics'
     };
-    
+
     return mapping[tier] || 'reportProcessing';
   }
 
@@ -880,10 +926,10 @@ class ReportProcessor {
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLng/2) * Math.sin(dLng/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
 
@@ -903,7 +949,7 @@ class ReportProcessor {
 
   async saveReportWithPriority(reportData, priority) {
     const Report = require('../models/Report');
-    return await Report.create({ ...reportData, priority, status: 'active' });
+    return await Report.create({ ...reportData, status: 'pending' });
   }
 
   async triggerEmergencyNotifications(report) {
@@ -991,11 +1037,11 @@ class ReportProcessor {
   updateProcessingStats(tier, processingTime) {
     this.stats.processed++;
     this.stats[tier] = (this.stats[tier] || 0) + 1;
-    
+
     // Update average processing time
     const alpha = 0.1;
-    this.stats.avgProcessingTime = alpha * processingTime + 
-                                   (1 - alpha) * this.stats.avgProcessingTime;
+    this.stats.avgProcessingTime = alpha * processingTime +
+      (1 - alpha) * this.stats.avgProcessingTime;
   }
 
   /**
@@ -1004,7 +1050,7 @@ class ReportProcessor {
   logProcessingStatistics() {
     const uptime = Date.now() - this.stats.lastResetTime;
     const throughput = (this.stats.processed / uptime) * 1000 * 60; // per minute
-    
+
     console.log('📊 Report Processing Statistics:', {
       ...this.stats,
       throughputPerMinute: throughput.toFixed(2),
@@ -1033,13 +1079,13 @@ class ReportProcessor {
   getStatistics() {
     const uptime = Date.now() - this.stats.lastResetTime;
     const throughput = uptime > 0 ? (this.stats.processed / uptime) * 1000 * 60 : 0;
-    
+
     return {
       ...this.stats,
       throughputPerMinute: throughput,
       uptime,
-      queueStatus: this.distributedQueue ? 'distributed' : 
-                   this.fallbackQueue ? 'fallback' : 'direct'
+      queueStatus: this.distributedQueue ? 'distributed' :
+        this.fallbackQueue ? 'fallback' : 'direct'
     };
   }
 
@@ -1048,13 +1094,13 @@ class ReportProcessor {
    */
   async initializeFallbackMode() {
     console.warn('⚠️ Initializing report processor in fallback mode');
-    
+
     this.distributedQueue = null;
     this.fallbackQueue = null;
-    
+
     // Ensure basic functionality
     this.isInitialized = true;
-    
+
     console.log('✅ Report processor running in fallback mode (direct processing only)');
   }
 }

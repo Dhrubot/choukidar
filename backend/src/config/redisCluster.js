@@ -1,5 +1,6 @@
 // === src/config/redisCluster.js (ENHANCED FOR BANGLADESH SCALE) ===
 // Redis Cluster Configuration for Distributed Queue System
+// Fixed to work with local Redis development setup
 // Optimized for 25,000+ concurrent users with high availability
 
 const Redis = require('ioredis');
@@ -12,10 +13,10 @@ class RedisClusterManager {
     this.sentinels = [];
     this.connectionPool = null;
     this.healthCheckInterval = null;
-    
+
     // Configuration based on environment
     this.config = this.getEnvironmentConfig();
-    
+
     // Connection statistics
     this.stats = {
       connectionsCreated: 0,
@@ -31,13 +32,13 @@ class RedisClusterManager {
    */
   getEnvironmentConfig() {
     const env = process.env.NODE_ENV || 'development';
-    
+
     const baseConfig = {
       // Connection settings
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT) || 6379,
       password: process.env.REDIS_PASSWORD || undefined,
-      
+
       // Database allocation
       databases: {
         cache: parseInt(process.env.REDIS_CACHE_DB) || 0,
@@ -59,26 +60,26 @@ class RedisClusterManager {
         createRetryIntervalMillis: 200
       },
 
-      // Performance settings
+      // Performance settings (FIXED FOR LOCAL DEVELOPMENT)
       performance: {
         family: 4,
         keepAlive: true,
         connectTimeout: 10000,
         commandTimeout: 5000,
         retryDelayOnFailover: 100,
-        enableReadyCheck: false,
+        enableReadyCheck: false,  // CHANGED: Enable ready check for local Redis
         maxLoadingTimeout: 0,
-        lazyConnect: true,
+        lazyConnect: true,      // CHANGED: Don't use lazy connect for local development
         maxRetriesPerRequest: 3,
-        enableOfflineQueue: false,
+        enableOfflineQueue: false, // CHANGED: Enable offline queue for better error handling
         dropBufferSupport: false
       },
 
       // Memory management
       memory: {
         maxMemoryPolicy: 'allkeys-lru',
-        maxMemory: process.env.REDIS_MAX_MEMORY || '2gb',
-        
+        maxMemory: process.env.REDIS_MAX_MEMORY || '2gb', // Reduced for local development
+
         // Compression settings
         compression: {
           enabled: true,
@@ -91,7 +92,7 @@ class RedisClusterManager {
       cluster: {
         enabled: process.env.REDIS_CLUSTER_ENABLED === 'true',
         nodes: this.parseClusterNodes(),
-        
+
         // Cluster options
         options: {
           scaleReads: 'slave',
@@ -110,7 +111,7 @@ class RedisClusterManager {
         enabled: process.env.REDIS_SENTINEL_ENABLED === 'true',
         masterName: process.env.REDIS_MASTER_NAME || 'choukidar-master',
         sentinels: this.parseSentinelNodes(),
-        
+
         // Sentinel options
         options: {
           sentinelRetryCount: 3,
@@ -126,24 +127,34 @@ class RedisClusterManager {
     const envConfigs = {
       development: {
         pool: { min: 2, max: 10 },
-        performance: { 
+        performance: {
           connectTimeout: 5000,
-          commandTimeout: 3000 
-        }
+          commandTimeout: 3000,
+          enableReadyCheck: true,
+          lazyConnect: false,
+          enableOfflineQueue: true
+        },
+        memory: { maxMemory: '256mb' }
       },
-      
+
       staging: {
         pool: { min: 3, max: 20 },
-        memory: { maxMemory: '1gb' }
+        memory: { maxMemory: '1gb' },
+        performance: {
+          lazyConnect: true,
+          enableOfflineQueue: false
+        }
       },
-      
+
       production: {
         pool: { min: 10, max: 100 },
         memory: { maxMemory: '4gb' },
         performance: {
           connectTimeout: 15000,
           commandTimeout: 8000,
-          maxRetriesPerRequest: 5
+          maxRetriesPerRequest: 5,
+          lazyConnect: true,
+          enableOfflineQueue: false
         }
       }
     };
@@ -162,29 +173,32 @@ class RedisClusterManager {
   async initialize() {
     try {
       console.log('🚀 Initializing Redis cluster for Bangladesh scale...');
-      
+
       // Validate configuration
       this.validateConfiguration();
-      
+
+      // Test basic Redis connection first
+      await this.testBasicConnection();
+
       // Initialize different Redis connections for different purposes
       await this.initializeDatabaseConnections();
-      
+
       // Set up monitoring and health checks
       this.setupHealthMonitoring();
-      
+
       // Configure error handling
       this.setupErrorHandling();
-      
+
       // Setup graceful shutdown
       this.setupGracefulShutdown();
-      
+
       this.isInitialized = true;
-      
+
       console.log('✅ Redis cluster initialized successfully');
       console.log(`📊 Active connections: Cache, Queues, Sessions, RateLimit, Analytics`);
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         message: 'Redis cluster ready for Bangladesh scale',
         connections: Object.keys(this.clusters)
       };
@@ -192,6 +206,56 @@ class RedisClusterManager {
     } catch (error) {
       console.error('❌ Redis cluster initialization failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Test basic Redis connection before proceeding
+   */
+  async testBasicConnection() {
+    console.log('🔍 Testing basic Redis connection...');
+
+    const testConfig = {
+      host: this.config.host,
+      port: this.config.port,
+      password: this.config.password,
+      connectTimeout: 5000,
+      commandTimeout: 3000,
+      enableReadyCheck: true,
+      lazyConnect: false,
+      enableOfflineQueue: true,
+      maxRetriesPerRequest: 1,
+      retryStrategy: (times) => {
+        if (times > 3) return null; // Stop retrying after 3 attempts
+        return Math.min(times * 50, 2000);
+      }
+    };
+
+    const testClient = new Redis(testConfig);
+
+    try {
+      // Wait for connection or timeout
+      await Promise.race([
+        testClient.ping(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timeout')), 5000)
+        )
+      ]);
+
+      console.log('✅ Basic Redis connection test passed');
+      await testClient.disconnect();
+
+    } catch (error) {
+      await testClient.disconnect();
+
+      // Provide helpful error messages
+      if (error.message.includes('ECONNREFUSED')) {
+        throw new Error('Redis server is not running. Please start Redis with: redis-server');
+      } else if (error.message.includes('timeout')) {
+        throw new Error('Redis connection timeout. Check if Redis is accessible at ' + this.config.host + ':' + this.config.port);
+      } else {
+        throw new Error('Redis connection failed: ' + error.message);
+      }
     }
   }
 
@@ -210,14 +274,19 @@ class RedisClusterManager {
     for (const conn of connections) {
       try {
         console.log(`🔌 Connecting to Redis ${conn.name} (DB ${conn.db}): ${conn.description}`);
-        
+
         const redisInstance = await this.createRedisConnection(conn.db, conn.name);
         this.clusters[conn.name] = redisInstance;
-        
-        // Test connection
-        await redisInstance.ping();
+
+        // Test connection with timeout
+        await Promise.race([
+          redisInstance.ping(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Ping timeout')), 3000)
+          )
+        ]);
+
         console.log(`✅ Redis ${conn.name} connection established`);
-        
         this.stats.connectionsCreated++;
 
       } catch (error) {
@@ -231,28 +300,55 @@ class RedisClusterManager {
    * Create a Redis connection with optimal settings
    */
   async createRedisConnection(database, connectionName) {
-    const connectionConfig = {
+    const connectionConfig = process.env.NODE_ENV === 'development' ? {
       host: this.config.host,
       port: this.config.port,
       password: this.config.password,
       db: database,
       connectionName: `choukidar-${connectionName}`,
-      
+      // Performance settings (optimized for local development)
+      family: this.config.performance.family,
+      keepAlive: this.config.performance.keepAlive,
+      connectTimeout: this.config.performance.connectTimeout,
+      commandTimeout: this.config.performance.commandTimeout,
+      enableReadyCheck: this.config.performance.enableReadyCheck,
+      maxLoadingTimeout: this.config.performance.maxLoadingTimeout,
+      lazyConnect: this.config.performance.lazyConnect,
+      enableOfflineQueue: this.config.performance.enableOfflineQueue,
+      maxRetriesPerRequest: this.config.performance.maxRetriesPerRequest,
+
+      // Custom retry strategy
+      retryStrategy: (times) => {
+        if (times > 3) {
+          console.error(`❌ Redis ${connectionName} failed after 3 retry attempts`);
+          return null; // Stop retrying
+        }
+        const delay = Math.min(times * 50, 2000);
+        console.log(`⏰ Redis ${connectionName} retry attempt ${times}, delay: ${delay}ms`);
+        return delay;
+      }
+    } : {
+      host: this.config.host,
+      port: this.config.port,
+      password: this.config.password,
+      db: database,
+      connectionName: `choukidar-${connectionName}`,
+
       // Performance settings
       ...this.config.performance,
-      
+
       // Event handling
       retryDelayOnFailover: this.config.performance.retryDelayOnFailover,
       enableReadyCheck: this.config.performance.enableReadyCheck,
       maxLoadingTimeout: this.config.performance.maxLoadingTimeout,
-      
+
       // Custom retry strategy
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);
         console.log(`⏰ Redis ${connectionName} retry attempt ${times}, delay: ${delay}ms`);
         return delay;
       },
-      
+
       // Connection timeout
       connectTimeout: this.config.performance.connectTimeout,
       commandTimeout: this.config.performance.commandTimeout
@@ -260,6 +356,7 @@ class RedisClusterManager {
 
     // Use cluster or sentinel if enabled
     if (this.config.cluster.enabled && this.config.cluster.nodes.length > 0) {
+      console.log(`🔗 Using Redis cluster mode for ${connectionName}`);
       return new Redis.Cluster(this.config.cluster.nodes, {
         ...this.config.cluster.options,
         redisOptions: {
@@ -268,8 +365,9 @@ class RedisClusterManager {
         }
       });
     }
-    
+
     if (this.config.sentinel.enabled && this.config.sentinel.sentinels.length > 0) {
+      console.log(`🛡️ Using Redis sentinel mode for ${connectionName}`);
       return new Redis({
         sentinels: this.config.sentinel.sentinels,
         name: this.config.sentinel.masterName,
@@ -279,6 +377,7 @@ class RedisClusterManager {
     }
 
     // Standard Redis connection
+    console.log(`📡 Using standard Redis connection for ${connectionName}`);
     return new Redis(connectionConfig);
   }
 
@@ -313,10 +412,10 @@ class RedisClusterManager {
 
     try {
       const result = await connection[command](...args);
-      
+
       this.stats.commandsExecuted++;
       const duration = Date.now() - startTime;
-      
+
       if (duration > 1000) {
         console.warn(`⚠️ Slow Redis command: ${command} took ${duration}ms on ${connectionType}`);
       }
@@ -326,13 +425,13 @@ class RedisClusterManager {
     } catch (error) {
       this.stats.errors++;
       console.error(`❌ Redis command failed: ${command} on ${connectionType}`, error);
-      
+
       // Attempt retry for transient errors
       if (this.isRetryableError(error)) {
         console.log(`🔄 Retrying Redis command: ${command} on ${connectionType}`);
         return await connection[command](...args);
       }
-      
+
       throw error;
     }
   }
@@ -364,7 +463,11 @@ class RedisClusterManager {
    */
   setupHealthMonitoring() {
     this.healthCheckInterval = setInterval(async () => {
-      await this.performHealthCheck();
+      try {
+        await this.performHealthCheck();
+      } catch (error) {
+        console.error('❌ Health check error:', error);
+      }
     }, 30000); // Check every 30 seconds
 
     // Log statistics every 5 minutes
@@ -387,8 +490,21 @@ class RedisClusterManager {
     for (const [name, connection] of Object.entries(this.clusters)) {
       try {
         const startTime = Date.now();
-        await connection.ping();
+        await Promise.race([
+          connection.ping(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Health check timeout')), 5000)
+          )
+        ]);
         const latency = Date.now() - startTime;
+        if (process.env.NODE_ENV === 'development') {
+          healthStatus.connections[name] = {
+          status: 'healthy',
+          latency: `${latency}ms`,
+          connected: connection.status === 'ready'
+        }
+  
+        };
 
         // Get connection info
         const info = await connection.info('server');
@@ -423,8 +539,8 @@ class RedisClusterManager {
       .filter(conn => conn.status === 'unhealthy').length;
 
     if (unhealthyConnections > 0) {
-      healthStatus.overall = unhealthyConnections >= Object.keys(this.clusters).length / 2 
-        ? 'critical' 
+      healthStatus.overall = unhealthyConnections >= Object.keys(this.clusters).length / 2
+        ? 'critical'
         : 'degraded';
     }
 
@@ -433,7 +549,9 @@ class RedisClusterManager {
     // Log issues
     if (healthStatus.overall !== 'healthy') {
       console.warn('⚠️ Redis cluster health issue:', healthStatus);
-      productionLogger.warn('Redis cluster health degraded', healthStatus);
+      if (productionLogger) {
+        productionLogger.warn('Redis cluster health degraded', healthStatus);
+      }
     }
 
     return healthStatus;
@@ -450,8 +568,14 @@ class RedisClusterManager {
       connectionUtilization: this.getConnectionUtilization()
     };
 
-    console.log('📊 Redis Cluster Statistics:', stats);
-    
+    console.log('📊 Redis Cluster Statistics:', {
+      connectionsCreated: stats.connectionsCreated,
+      activeConnections: stats.activeConnections,
+      commandsExecuted: stats.commandsExecuted,
+      errors: stats.errors,
+      lastHealthCheck: stats.lastHealthCheck?.overall || 'unknown'
+    });
+
     if (process.env.NODE_ENV === 'development') {
       console.table(stats);
     }
@@ -463,9 +587,11 @@ class RedisClusterManager {
   setupErrorHandling() {
     Object.entries(this.clusters).forEach(([name, connection]) => {
       connection.on('error', (error) => {
-        console.error(`❌ Redis ${name} error:`, error);
+        console.error(`❌ Redis ${name} error:`, error.message);
         this.stats.errors++;
-        productionLogger.error(`Redis ${name} error`, { error: error.message });
+        if (productionLogger) {
+          productionLogger.error(`Redis ${name} error`, { error: error.message });
+        }
       });
 
       connection.on('connect', () => {
@@ -492,7 +618,7 @@ class RedisClusterManager {
   setupGracefulShutdown() {
     const gracefulShutdown = async (signal) => {
       console.log(`🔄 Redis cluster received ${signal}, shutting down gracefully...`);
-      
+
       if (this.healthCheckInterval) {
         clearInterval(this.healthCheckInterval);
       }
@@ -522,7 +648,7 @@ class RedisClusterManager {
   parseClusterNodes() {
     const nodes = process.env.REDIS_CLUSTER_NODES;
     if (!nodes) return [];
-    
+
     return nodes.split(',').map(node => {
       const [host, port] = node.trim().split(':');
       return { host, port: parseInt(port) };
@@ -532,7 +658,7 @@ class RedisClusterManager {
   parseSentinelNodes() {
     const sentinels = process.env.REDIS_SENTINELS;
     if (!sentinels) return [];
-    
+
     return sentinels.split(',').map(sentinel => {
       const [host, port] = sentinel.trim().split(':');
       return { host, port: parseInt(port) };
@@ -589,7 +715,7 @@ class RedisClusterManager {
   getConnectionUtilization() {
     const totalConnections = Object.keys(this.clusters).length;
     const maxConnections = this.config.pool.max;
-    
+
     return {
       active: totalConnections,
       maximum: maxConnections,
@@ -604,8 +730,8 @@ class RedisClusterManager {
       'ETIMEDOUT',
       'ECONNREFUSED'
     ];
-    
-    return retryableErrors.some(retryable => 
+
+    return retryableErrors.some(retryable =>
       error.message.includes(retryable) || error.code === retryable
     );
   }
@@ -628,7 +754,7 @@ class RedisClusterManager {
 
   deepMerge(target, source) {
     const result = { ...target };
-    
+
     for (const key in source) {
       if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
         result[key] = this.deepMerge(target[key] || {}, source[key]);
@@ -636,7 +762,7 @@ class RedisClusterManager {
         result[key] = source[key];
       }
     }
-    
+
     return result;
   }
 
@@ -657,11 +783,16 @@ class RedisClusterManager {
   // Test all connections
   async testAllConnections() {
     const results = {};
-    
+
     for (const [name, connection] of Object.entries(this.clusters)) {
       try {
         const startTime = Date.now();
-        await connection.ping();
+        await Promise.race([
+          connection.ping(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Test timeout')), 3000)
+          )
+        ]);
         results[name] = {
           status: 'success',
           latency: Date.now() - startTime
@@ -673,7 +804,7 @@ class RedisClusterManager {
         };
       }
     }
-    
+
     return results;
   }
 
@@ -682,7 +813,7 @@ class RedisClusterManager {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('Database flush not allowed in production');
     }
-    
+
     const connection = this.getConnection(connectionType);
     await connection.flushdb();
     console.log(`🧹 Flushed Redis database: ${connectionType}`);
