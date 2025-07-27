@@ -158,24 +158,38 @@ app.use((req, res, next) => {
   next();
 });
 
-// ===== PHASE 1: DISTRIBUTED QUEUE INITIALIZATION =====
-(async () => {
+// ===== PHASE 1: DISTRIBUTED QUEUE INITIALIZATION (FIXED) =====
+// Wait for MongoDB connection before initializing queues
+mongoose.connection.once('open', async () => {
   if (process.env.INITIALIZE_DISTRIBUTED_QUEUE === 'true') {
     try {
       console.log('🚀 Initializing distributed queue system...');
       
+      // Initialize with proper error handling
       const { distributedQueueService } = require('./src/services/distributedQueueService');
-      await distributedQueueService.initialize();
+      const initResult = await distributedQueueService.initialize();
       
-      const { reportProcessor } = require('./src/middleware/reportProcessor');
-      await reportProcessor.initialize();
+      if (initResult.success) {
+        console.log('✅ Distributed queue service initialized');
+        
+        // Initialize report processor
+        const { reportProcessor } = require('./src/middleware/reportProcessor');
+        const processorResult = await reportProcessor.initialize();
+        
+        if (processorResult.success) {
+          console.log('✅ Phase 1 distributed queue system ready');
+        } else {
+          console.warn('⚠️ Report processor failed, using fallback');
+        }
+      } else {
+        console.warn('⚠️ Distributed queue failed, using fallback processing');
+      }
       
-      console.log('✅ Phase 1 distributed queue system ready');
     } catch (error) {
-      console.warn('⚠️ Using fallback processing:', error.message);
+      console.warn('⚠️ Phase 1 initialization failed, using fallback processing:', error.message);
     }
   }
-})()
+});
 
 // EXISTING ROUTES (PRESERVED)
 app.use('/api/reports', require('./src/routes/reports'));
