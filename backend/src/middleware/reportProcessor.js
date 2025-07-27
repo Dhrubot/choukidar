@@ -2808,7 +2808,7 @@ class ReportProcessor {
           tier: priority,
           processingStarted: new Date()
         },
-        overallStatus: priority === 'emergency' ? 'emergency_processing' : 'processing'
+        overallStatus: priority === 'emergency' ? 'pending' : 'processing'
       },
 
       // Security context
