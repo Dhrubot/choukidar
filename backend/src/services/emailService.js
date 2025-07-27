@@ -134,7 +134,7 @@ const sendVerificationEmail = async (to, verificationLink) => {
       <p><em>SafeStreets Bangladesh Team</em></p>
     </div>
   `;
-  
+
   try {
     await transporter.sendMail({
       from: `"SafeStreets Bangladesh" <${process.env.EMAIL_USER}>`,
@@ -150,8 +150,239 @@ const sendVerificationEmail = async (to, verificationLink) => {
   }
 };
 
+/**
+ * Send emergency alert email to administrators
+ */
+const sendEmergencyAlertEmail = async (to, reportData) => {
+  const subject = `🚨 EMERGENCY ALERT: ${reportData.type} - SafeStreets Bangladesh`;
+
+  const html = `
+    <div style="font-family: 'Inter', sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 20px auto; padding: 20px; border: 2px solid #dc2626; border-radius: 8px; background-color: #fef2f2;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="background-color: #dc2626; color: white; padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 700;">🚨 EMERGENCY ALERT</h1>
+        </div>
+        <h2 style="color: #dc2626; font-size: 20px; margin: 0;">SafeStreets Bangladesh</h2>
+      </div>
+      
+      <div style="background-color: white; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+        <h3 style="color: #dc2626; margin-top: 0;">Emergency Report Details</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Report ID:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${reportData.reportId}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Type:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${reportData.type.charAt(0).toUpperCase() + reportData.type.slice(1)}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Severity:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">
+              <span style="background-color: ${reportData.severity >= 4 ? '#dc2626' : '#f59e0b'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+                ${reportData.severity}/5
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Location:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${reportData.location}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Time:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${new Date(reportData.timestamp).toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Security Score:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">
+              <span style="background-color: ${reportData.securityScore >= 70 ? '#dc2626' : reportData.securityScore >= 50 ? '#f59e0b' : '#10b981'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+                ${reportData.securityScore}/100
+              </span>
+            </td>
+          </tr>
+        </table>
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${process.env.FRONTEND_URL}/admin/reports/${reportData.reportId}" style="display: inline-block; padding: 12px 25px; background-color: #dc2626; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+          View Report Details
+        </a>
+      </div>
+      
+      <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 6px; margin: 20px 0;">
+        <p style="margin: 0; font-weight: 600; color: #856404;">⚠️ IMMEDIATE ACTION REQUIRED</p>
+        <p style="margin: 5px 0 0 0; color: #856404; font-size: 14px;">This emergency report requires immediate attention and response.</p>
+      </div>
+      
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #64748B;">
+        <p>🚨 Emergency Alert System - SafeStreets Bangladesh</p>
+        <p>Received at: ${new Date().toLocaleString()}</p>
+        <p style="color: #dc2626; font-weight: 600;">This is an automated emergency notification</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"SafeStreets Emergency System" <${process.env.EMAIL_FROM}>`,
+      to: to,
+      subject: subject,
+      html: html,
+      priority: 'high',
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'high'
+      }
+    });
+    console.log(`🚨 Emergency alert email sent to ${to}`);
+    return { success: true, error: null };
+  } catch (error) {
+    console.error(`❌ Error sending emergency alert email to ${to}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send fallback alert email (when main systems fail)
+ */
+const sendFallbackAlertEmail = async (to, reportData) => {
+  const subject = `⚠️ SYSTEM FALLBACK: Emergency Report Processed - SafeStreets`;
+
+  const html = `
+    <div style="font-family: 'Inter', sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 20px auto; padding: 20px; border: 2px solid #f59e0b; border-radius: 8px; background-color: #fffbeb;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="background-color: #f59e0b; color: white; padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 700;">⚠️ SYSTEM FALLBACK ALERT</h1>
+        </div>
+        <h2 style="color: #f59e0b; font-size: 18px; margin: 0;">SafeStreets Bangladesh</h2>
+      </div>
+      
+      <div style="background-color: white; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+        <h3 style="color: #f59e0b; margin-top: 0;">Emergency Report Processed via Fallback</h3>
+        <p style="margin-bottom: 15px; color: #7c2d12;">The main emergency processing system experienced issues, but the report was successfully processed via our fallback system.</p>
+        
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Report ID:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${reportData.reportId}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Type:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${reportData.type}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Timestamp:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${new Date(reportData.timestamp).toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Fallback Reason:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${reportData.fallbackReason}</td>
+          </tr>
+        </table>
+      </div>
+      
+      <div style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 6px; margin: 20px 0;">
+        <p style="margin: 0; font-weight: 600; color: #92400e;">🔧 SYSTEM STATUS CHECK RECOMMENDED</p>
+        <p style="margin: 5px 0 0 0; color: #92400e; font-size: 14px;">Please check the main emergency processing system for any issues.</p>
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${process.env.FRONTEND_URL}/admin/reports/${reportData.reportId}" style="display: inline-block; padding: 12px 25px; background-color: #f59e0b; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+          Review Report
+        </a>
+      </div>
+      
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #64748B;">
+        <p>⚠️ Fallback System Alert - SafeStreets Bangladesh</p>
+        <p>Processed at: ${new Date().toLocaleString()}</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"SafeStreets Fallback System" <${process.env.EMAIL_FROM}>`,
+      to: to,
+      subject: subject,
+      html: html,
+      priority: 'normal'
+    });
+    console.log(`⚠️ Fallback alert email sent to ${to}`);
+    return { success: true, error: null };
+  } catch (error) {
+    console.error(`❌ Error sending fallback alert email to ${to}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send system recovery notification
+ */
+const sendSystemRecoveryEmail = async (to, recoveryData) => {
+  const subject = `✅ SYSTEM RECOVERED: Emergency Processing Restored - SafeStreets`;
+
+  const html = `
+    <div style="font-family: 'Inter', sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 20px auto; padding: 20px; border: 2px solid #10b981; border-radius: 8px; background-color: #f0fdf4;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="background-color: #10b981; color: white; padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 700;">✅ SYSTEM RECOVERED</h1>
+        </div>
+        <h2 style="color: #10b981; font-size: 18px; margin: 0;">SafeStreets Bangladesh</h2>
+      </div>
+      
+      <div style="background-color: white; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+        <h3 style="color: #10b981; margin-top: 0;">Emergency Processing System Restored</h3>
+        <p>The emergency processing system has been fully restored and is operating normally.</p>
+        
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Recovery Time:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${new Date().toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Downtime Duration:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${recoveryData.downtimeDuration || 'Unknown'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5; font-weight: 600;">Reports Processed via Fallback:</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e5e5;">${recoveryData.fallbackReports || 0}</td>
+          </tr>
+        </table>
+      </div>
+      
+      <div style="background-color: #dcfce7; border: 1px solid #10b981; padding: 15px; border-radius: 6px; margin: 20px 0;">
+        <p style="margin: 0; font-weight: 600; color: #166534;">✅ ALL SYSTEMS OPERATIONAL</p>
+        <p style="margin: 5px 0 0 0; color: #166534; font-size: 14px;">Emergency processing has returned to normal operation.</p>
+      </div>
+      
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #64748B;">
+        <p>✅ Recovery Notification - SafeStreets Bangladesh</p>
+        <p>System restored at: ${new Date().toLocaleString()}</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"SafeStreets System Monitor" <${process.env.EMAIL_FROM}>`,
+      to: to,
+      subject: subject,
+      html: html
+    });
+    console.log(`✅ System recovery email sent to ${to}`);
+    return { success: true, error: null };
+  } catch (error) {
+    console.error(`❌ Error sending recovery email to ${to}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendInvitationEmail,
   sendPasswordResetEmail,
   sendVerificationEmail,
+  sendEmergencyAlertEmail,
+  sendFallbackAlertEmail,
+  sendSystemRecoveryEmail
 };
