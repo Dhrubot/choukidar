@@ -448,6 +448,51 @@ class DistributedQueueService {
   }
 
   /**
+ * Add job to queue based on processing tier (MISSING METHOD - REQUIRED BY REPORT PROCESSOR)
+ * Maps processing tiers to appropriate queue names
+ */
+  async addToQueue(tier, jobData, options = {}) {
+    try {
+      // Map processing tiers to queue names
+      const tierToQueueMap = {
+        'emergency': 'emergencyReports',
+        'standard': 'standardReports',
+        'background': 'backgroundTasks',
+        'analytics': 'analyticsQueue'
+      };
+
+      // Get the appropriate queue name for the tier
+      const queueName = tierToQueueMap[tier];
+
+      if (!queueName) {
+        throw new Error(`Unknown processing tier: ${tier}. Valid tiers: ${Object.keys(tierToQueueMap).join(', ')}`);
+      }
+
+      // Set priority based on tier if not provided
+      if (!options.priority) {
+        const tierPriorities = {
+          'emergency': 1,
+          'standard': 2,
+          'background': 3,
+          'analytics': 4
+        };
+        options.priority = tierPriorities[tier];
+      }
+
+      // Call the existing addJob method
+      const result = await this.addJob(queueName, jobData, options);
+
+      console.log(`✅ Job added to ${tier} tier (${queueName} queue): ${result.jobId}`);
+
+      return result;
+
+    } catch (error) {
+      console.error(`❌ Failed to add job to ${tier} tier:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Smart job routing - automatically determines best queue
    */
   async routeJob(jobData, jobType, metadata = {}) {
