@@ -852,7 +852,8 @@ class ReportProcessor {
   async queueReportForProcessing(reportId, phases = ['immediate', 'fast', 'analysis']) {
     try {
       console.log(`📋 Queueing report ${reportId} for processing with phases: ${phases.join(', ')}`);
-
+      
+      const Report = require('../models/Report')
       // Try distributed queue first
       if (this.distributedQueue && this.distributedQueue.isInitialized) {
         const report = await Report.findById(reportId);
